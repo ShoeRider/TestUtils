@@ -33,15 +33,55 @@ $global:ErrorOptions = @{
 			{
 				$Count++
 				#$line = $_.InvocationInfo.ScriptLineNumber
-				write-host "[$Count]Line $($ErrorMessage.InvocationInfo.ScriptLineNumber): $ErrorMessage"
-				
+        $File = $($ErrorMessage.InvocationInfo.ScriptName)
+        write-host "$File"
+				write-host "`t[$Count]Line $($ErrorMessage.InvocationInfo.ScriptLineNumber): $ErrorMessage"
 			}
 			write-host "------------------------------------------------------------------------------"
 		}
 		pause
 		return $true
-		#Display_Message -mode "Failure" -Message "No Option was selected please try again." -SleepFor 3 
+		#Display_Message -mode "Failure" -Message "No Option was selected please try again." -SleepFor 3
 	}
+  );
+  "Detailed" = @(
+    "View Errors/Warnings",
+    {
+  		if ($Error)
+  		{
+        #$global:Error = $Error
+  			write-host "=============================================================================="
+  			write-host "Errors/Warnings:"
+  			write-host ""
+  			$Count = 0
+  			foreach ($ErrorMessage in $Error)
+  			{
+  			  write-host "------------------------------------------------------------------------------"
+  				$Count++
+  				#$line = $_.InvocationInfo.ScriptLineNumber
+          $File = $($ErrorMessage.InvocationInfo.ScriptName)
+          write-host "$File"
+  				write-host "[$Count]Line $($ErrorMessage.InvocationInfo.ScriptLineNumber): $ErrorMessage"
+          $ScriptStackTrace = "`n`t" + $($ErrorMessage.ScriptStackTrace).replace("`n","`n`t")
+          write-host "$ScriptStackTrace`n" -Separator "`t"
+          #write-host ($ErrorMessage.Exception | Format-List -Force | Out-String)      -ErrorAction Continue
+          #write-host ($ErrorMessage.InvocationInfo | Format-List -Force | Out-String) -ErrorAction Continue
+          #powershell.exe
+          #throw
+    			write-host "------------------------------------------------------------------------------"
+  			}
+  			write-host "=============================================================================="
+  		}
+  		pause
+  		return $true
+  		#Display_Message -mode "Failure" -Message "No Option was selected please try again." -SleepFor 3
+	 }
+  );
+  "Powershell" = @(
+    "View Errors/Warnings",{
+    exit(1)
+    #Display_Message -mode "Failure" -Message "No Option was selected please try again." -SleepFor 3
+  }
   );
   "Logs" = @(
     "View Logs",
@@ -105,11 +145,11 @@ class ErrorHandling {
   	.EXAMPLE
 
   	#>
-	$GivenManifest = "" 
+	$GivenManifest = ""
 	$CodeOptions = @()
 	$SelectedOptions = @()
 	$OptionObject
-	
+
 	ErrorHandling([string]$ManifestPath){
 		Try {
 			$this.GivenManifest	= Resolve-Path -Path $ManifestPath -ErrorAction Stop
@@ -120,7 +160,6 @@ class ErrorHandling {
 		$this.InitializeOptions()
     }
 	ErrorHandling([array]$Options){
-
 		$this.InitializeOptions($Options)
     }
 		[string] DeclareTest(){
@@ -139,7 +178,7 @@ class ErrorHandling {
 	[void] InitializeOptions([array]$Options){
 		<#
 		.SYNOPSIS
-		
+
 		.DESCRIPTION
 
 		.EXAMPLE
@@ -154,20 +193,18 @@ class ErrorHandling {
 			  #Invoke-expression
 			}
 		}
-		#Create List
-		#foreach ($)
-
-		#iex ""
-		#write-host $this.CodeOptions
-		#pause
 		$this.OptionObject = [System.Management.Automation.Host.ChoiceDescription[]]($this.SelectedOptions)
-		
 	}
-	
+
+
+
 	[void] InitializeOptions(){
 		$this.InitializeOptions(@("View","Logs","Continue"))
 	}
-	
+
+
+
+
 	[Boolean] InvokeOptionPrompt(){
 		#$Options = $
 		$result = $global:host.ui.PromptForChoice("","Select one of the following options:",$this.OptionObject, 0)
@@ -175,7 +212,7 @@ class ErrorHandling {
 		return Invoke-expression $this.CodeOptions[$result].ToString()
 		#$answer = $host.ui.PromptForChoice("","Select one of the following options:",$choices,0)
 	}
-	
+
 
 }
 
@@ -187,7 +224,7 @@ Function global:Display_Error_Message{
 
 	.EXAMPLE
 		Display_Error_Message -Mode $Mode -Message $Message -Message2 $Message2 -Message3 "An error has occured" -ErrorMessage $Error -ClearScreen $True -SleepFor 0
-		Display_Error_Message -Message "Test" -Message2 "Test"  -Message3 "Test" 
+		Display_Error_Message -Message "Test" -Message2 "Test"  -Message3 "Test"
 	#>
 	Param(
 		[String]$Mode="Failure",
@@ -203,9 +240,9 @@ Function global:Display_Error_Message{
 	while($continue)
 	{
 		Display_Message -Mode $Mode -Message $Message -Message2 $Message2 -Message3 "Script: $SelfFile has encountered an issue." -ErrorMessage $Error -ClearScreen $ClearScreen -SleepFor 0
-		[ErrorHandling]$ErrorHandling = [ErrorHandling]::new(@("View","Continue"))
+		[ErrorHandling]$ErrorHandling = [ErrorHandling]::new(@("View","Continue","Detailed","Powershell"))
 		$continue = $ErrorHandling.InvokeOptionPrompt()
-		
+
 		#cmd /c pause | out-null
 
 	}
