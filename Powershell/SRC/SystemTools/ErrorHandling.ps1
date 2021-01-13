@@ -23,30 +23,6 @@ $global:ErrorOptions = @{
   "View" = @(
     "View Errors/Warnings",
     {
-		if ($Error)
-		{
-			write-host "------------------------------------------------------------------------------"
-			write-host "Errors/Warnings:"
-			write-host ""
-			$Count = 0
-			foreach ($ErrorMessage in $Error)
-			{
-				$Count++
-				#$line = $_.InvocationInfo.ScriptLineNumber
-        $File = $($ErrorMessage.InvocationInfo.ScriptName)
-        write-host "$File"
-				write-host "`t[$Count]Line $($ErrorMessage.InvocationInfo.ScriptLineNumber): $ErrorMessage"
-			}
-			write-host "------------------------------------------------------------------------------"
-		}
-		pause
-		return $true
-		#Display_Message -mode "Failure" -Message "No Option was selected please try again." -SleepFor 3
-	}
-  );
-  "Detailed" = @(
-    "View Errors/Warnings",
-    {
   		if ($Error)
   		{
         #$global:Error = $Error
@@ -59,28 +35,72 @@ $global:ErrorOptions = @{
   			  write-host "------------------------------------------------------------------------------"
   				$Count++
   				#$line = $_.InvocationInfo.ScriptLineNumber
-          $File = $($ErrorMessage.InvocationInfo.ScriptName)
-          write-host "$File"
+				$File = $($ErrorMessage.InvocationInfo.ScriptName)
+				write-host "$File"
   				write-host "[$Count]Line $($ErrorMessage.InvocationInfo.ScriptLineNumber): $ErrorMessage"
-          $ScriptStackTrace = "`n`t" + $($ErrorMessage.ScriptStackTrace).replace("`n","`n`t")
-          write-host "$ScriptStackTrace`n" -Separator "`t"
-          #write-host ($ErrorMessage.Exception | Format-List -Force | Out-String)      -ErrorAction Continue
-          #write-host ($ErrorMessage.InvocationInfo | Format-List -Force | Out-String) -ErrorAction Continue
-          #powershell.exe
-          #throw
+
     			write-host "------------------------------------------------------------------------------"
   			}
   			write-host "=============================================================================="
   		}
   		pause
-  		return $true
+		return $true
+  		#Display_Message -mode "Failure" -Message "No Option was selected please try again." -SleepFor 3
+	 }
+  );
+  "Detailed" = @(
+    "View Errors/Warnings",
+    {
+  		if ($Error)
+  		{
+        #$global:Error = $Error
+  			write-host "=============================================================================="
+  			write-host "Errors/Warnings:"
+  			write-host ""
+  			$Count = 0
+  			
+			write-host "------------------------------------------------------------------------------"
+  			foreach ($ErrorMessage in $Error)
+  			{
+				try
+				{
+					  $Count++
+					  #$line = $_.InvocationInfo.ScriptLineNumber
+					  $File = $($ErrorMessage.InvocationInfo.ScriptName)
+					  write-host "$File"
+					  write-host "[$Count]Line $($ErrorMessage.InvocationInfo.ScriptLineNumber): $ErrorMessage"
+					  $ScriptStackTrace = "`n`t" + $($ErrorMessage.ScriptStackTrace).replace("`n","`n`t")
+					  write-host "$ScriptStackTrace`n" -Separator "`t"
+					  #write-host ($ErrorMessage.Exception | Format-List -Force | Out-String)      -ErrorAction Continue
+					  #write-host ($ErrorMessage.InvocationInfo | Format-List -Force | Out-String) -ErrorAction Continue
+					  #powershell.exe
+					  #throw
+					  write-host "------------------------------------------------------------------------------"
+				}
+				catch
+				{
+					
+				}
+				pause
+  			}
+			
+  			write-host "=============================================================================="
+			
+  		}
+  		pause
+		return $true
   		#Display_Message -mode "Failure" -Message "No Option was selected please try again." -SleepFor 3
 	 }
   );
   "Powershell" = @(
     "View Errors/Warnings",{
-    exit(1)
+    return $true
     #Display_Message -mode "Failure" -Message "No Option was selected please try again." -SleepFor 3
+  }
+  );
+   "Exit" = @(
+    "Exit Powershell script",{
+    Exit
   }
   );
   "Logs" = @(
@@ -209,6 +229,11 @@ class ErrorHandling {
 		#$Options = $
 		$result = $global:host.ui.PromptForChoice("","Select one of the following options:",$this.OptionObject, 0)
 		#write-host $this.CodeOptions[$result]
+    if ($result -gt $this.CodeOptions.count)
+    {
+      Display_Message -Message "No Option was selected please try again." -SleepFor 3
+    }
+
 		return Invoke-expression $this.CodeOptions[$result].ToString()
 		#$answer = $host.ui.PromptForChoice("","Select one of the following options:",$choices,0)
 	}
@@ -231,6 +256,7 @@ Function global:Display_Error_Message{
 		[String]$Message=" Add Message",
 		[String]$Message2="Contact Engineering!",
 		[String]$Message3="",
+		[Array]$Options = @("View","Continue","Detailed","Exit"),
 		[Boolean]$ClearScreen=$True,
 		[Boolean]$Pause=$True
 	)
@@ -240,7 +266,7 @@ Function global:Display_Error_Message{
 	while($continue)
 	{
 		Display_Message -Mode $Mode -Message $Message -Message2 $Message2 -Message3 "Script: $SelfFile has encountered an issue." -ErrorMessage $Error -ClearScreen $ClearScreen -SleepFor 0
-		[ErrorHandling]$ErrorHandling = [ErrorHandling]::new(@("View","Continue","Detailed","Powershell"))
+		[ErrorHandling]$ErrorHandling = [ErrorHandling]::new($Options)
 		$continue = $ErrorHandling.InvokeOptionPrompt()
 
 		#cmd /c pause | out-null
@@ -249,6 +275,71 @@ Function global:Display_Error_Message{
 	#ExitWithCode -exitcode 1
 }
 
+Function global:CheckJobsForErrors{
+	<#
+	.SYNOPSIS
+		Function to display Error, and Halt Program.
+	.DESCRIPTION
+
+	.EXAMPLE
+		CheckForErrors -Message "Something Went wrong"
+	#>
+	Param(
+		$JOBS,
+		[String]$Mode="Failure",
+		[String]$Message=" Add Message",
+		[String]$Message2="Contact Engineering!",
+		[Boolean]$ClearScreen=$True,
+		[Boolean]$Pause=$True
+	)
+	foreach($JOB in $JOBS)
+	{
+		write-host $JOB.JobStateInfo.Reason.Message
+		$JOB | Receive-Job -Keep -OutVariable MyOut -ErrorVariable MyError
+		if($MyError)
+		{
+			Display_Error_Message -Mode $Mode -Message $MyError -Message2 $Message2 -ClearScreen $ClearScreen -Pause $Pause
+		}
+		#Display_Error_Message -Mode $Mode -Message $Message -Message2 $Message2 -ClearScreen $ClearScreen -Pause $Pause
+	}
+
+}
+
+
+
+Function global:CheckJobsForErrors{
+	<#
+	.SYNOPSIS
+		Function to display Error, and Halt Program.
+	.DESCRIPTION
+
+	.EXAMPLE
+		CheckForErrors -Message "Something Went wrong"
+	#>
+	Param(
+		$JOBS,
+		[String]$Mode="Failure",
+		[String]$Message=" Add Message",
+		[String]$Message2="Contact Engineering!",
+		[Boolean]$ClearScreen=$True,
+		[Boolean]$Pause=$True
+	)
+
+	foreach($JOB in $JOBS)
+	{
+		write-host $JOB.JobStateInfo.Reason.Message
+		$JOB | Receive-Job -Keep -OutVariable MyOut -ErrorVariable MyError 6>&1
+		if($MyError)
+		{
+			Display_Error_Message -Mode $Mode -Message $MyError -Message2 $Message2 -ClearScreen $ClearScreen -Pause $Pause
+		}
+		
+		#Display_Error_Message -Mode $Mode -Message $Message -Message2 $Message2 -ClearScreen $ClearScreen -Pause $Pause
+	}
+
+}
+
+
 Function global:CheckForErrors{
 	<#
 	.SYNOPSIS
@@ -256,7 +347,7 @@ Function global:CheckForErrors{
 	.DESCRIPTION
 
 	.EXAMPLE
-		Display_Error_Message -Message "Something Went wrong"
+		CheckForErrors -Message "Something Went wrong"
 	#>
 	Param(
 		[String]$Mode="Failure",
