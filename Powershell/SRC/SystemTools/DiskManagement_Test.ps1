@@ -174,7 +174,7 @@ Describe "DiskManagement" {
 				$DiskManagement.ApplyZip("$($TT.Instance_SourceDir)\TestZip.zip")
 			}
 
-			if($false)
+			if($true)
 			{
 				$TT.DeclareTest("ZIP")
 				[DiskManagement]$DiskManagement = [DiskManagement]::new($Global:USBFilter)
@@ -184,14 +184,47 @@ Describe "DiskManagement" {
 				$DiskManagement.getcount() | Should be 1
 				$DiskManagement.PrepDisks('NTFS')
 				#"$Dir\TestZip.zip"
-
+				
+				$Source_HashCode = "Fake HASH"
+				#$Source_HashCode = ( Get-ChildItem "$($TT.Instance_SourceDir)\I-20233-3759\I-20233-3759" -Recurse | Get-FileHash).Hash
+				
+				#$Source_HashCode = Get-FolderHash_1("$($TT.Instance_SourceDir)\I-20233-3759\I-20233-3759")
+				
+				#$Source_HashCode = Get-FolderHash "$($TT.Instance_SourceDir)\I-20233-3759\I-20233-3759"
 				write-host "$($TT.Instance_SourceDir)\I-20233-3759       | Should be `$True"
 				$TT.IsFile("$($TT.Instance_SourceDir)\I-20233-3759.zip") | Should be $True
 				#pause
-				$DiskManagement.ApplyFolderContents("$($TT.Instance_SourceDir)\I-20233-3759\I-20233-3759")
+				$DiskManagement.ApplyFolderContents("$($TT.Instance_SourceDir)\I-20233-3759\I-20233-3759",$Source_HashCode)
+				$CID            = 88888888
+				$OrderNumber    = 12345678
+				
+				
+				$DiskManagement.SaveLogs("R:\",$CID,$OrderNumber)
 			}
 		}
+		It "SaveLogs" {
+			<#
+			.SYNOPSIS
 
+			#>
+
+
+			if($false)
+			{
+				$TT.DeclareTest("ZIP")
+				[DiskManagement]$DiskManagement = [DiskManagement]::new($Global:USBFilter)
+				#write-host $DiskManagement.FilteredDisks[0]
+				#write-host $DiskManagement.FilteredDisks.gettype()
+				#pause
+				$DiskManagement.getcount() | Should be 1
+				$DiskManagement.PrepDisks('NTFS')
+				$CID            = 88888888
+				$OrderNumber    = 12345678
+				
+				
+				$DiskManagement.SaveLogs($CID,$OrderNumber)
+			}
+		}
 	}
 
 }
