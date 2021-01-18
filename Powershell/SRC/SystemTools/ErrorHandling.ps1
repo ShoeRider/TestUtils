@@ -58,7 +58,7 @@ $global:ErrorOptions = @{
   			write-host "Errors/Warnings:"
   			write-host ""
   			$Count = 0
-  			
+
 			write-host "------------------------------------------------------------------------------"
   			foreach ($ErrorMessage in $Error)
   			{
@@ -79,13 +79,13 @@ $global:ErrorOptions = @{
 				}
 				catch
 				{
-					
+
 				}
 				pause
   			}
-			
+
   			write-host "=============================================================================="
-			
+
   		}
   		pause
 		return $true
@@ -324,16 +324,17 @@ Function global:CheckJobsForErrors{
 		[Boolean]$ClearScreen=$True,
 		[Boolean]$Pause=$True
 	)
-
+  start-sleep 5
 	foreach($JOB in $JOBS)
 	{
+
 		write-host $JOB.JobStateInfo.Reason.Message
 		$JOB | Receive-Job -Keep -OutVariable MyOut -ErrorVariable MyError 6>&1
 		if($MyError)
 		{
 			Display_Error_Message -Mode $Mode -Message $MyError -Message2 $Message2 -ClearScreen $ClearScreen -Pause $Pause
 		}
-		
+
 		#Display_Error_Message -Mode $Mode -Message $Message -Message2 $Message2 -ClearScreen $ClearScreen -Pause $Pause
 	}
 
