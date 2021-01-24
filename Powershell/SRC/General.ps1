@@ -3,10 +3,118 @@
 #
 # ===================================================================================================
 # ==========================================================
-# Command Line Parameters
+# Command Line   Parameters
 # Import:
 #     Import-Module General.psm1
 # ==========================================================
+
+Function global:ContainsCaracters{
+  param(
+    $String,
+    $Characters
+  )
+  #write-host "Characters:$Characters"
+  #write-host $([char[]]$Characters)
+  foreach ($Character in $([char[]]$Characters)){
+    #write-host "`"$String`" - `"$Character`" :$($String.contains($Character))"
+    if ($String.contains($Character))
+    {
+      return $True
+    }
+  }
+  return $False
+
+}
+
+
+Function global:SaveModule
+{
+  try {
+    #Import-Module PsIni
+
+    Import-Module -FullyQualifiedName 'E:\Modules\XXX'
+  } catch {
+    #Install-Module PsIni | Save-Module -Path '$Dir\PsIni'
+    #Import-Module PsIni
+    Install-Module -name PSReleaseTools -Force
+    Find-Module -name PSReleaseTools | Save-Module -Path "E:\PowershellEXE\General_Test\Utils\Powershell\ModuleManager\Modules"
+
+    Find-Module -name PsIni | Save-Module -Path "E:\PowershellEXE\General_Test\Utils\Powershell\ModuleManager\Modules"
+    Import-Module -FullyQualifiedName 'E:\Modules\XXX'
+  }
+}
+Function global:SaveModule
+{
+  try {
+    #Import-Module PsIni
+
+    Import-Module -FullyQualifiedName 'E:\Modules\XXX'
+  } catch {
+    #Install-Module PsIni | Save-Module -Path '$Dir\PsIni'
+    #Import-Module PsIni
+
+    Find-Module -name PsIni | Save-Module -Path "E:\PowershellEXE\General_Test\Utils\Powershell\ModuleManager\Modules"
+    Import-Module -FullyQualifiedName 'E:\Modules\XXX'
+  }
+}
+
+
+function global:SaveModule {
+  <#
+  .SYNOPSIS
+    Save a module by module name.
+  .DESCRIPTION
+		intended to help Save Modules to be used within WinPE.
+  .EXAMPLE
+    Example 1.
+      SaveModule "PSReleaseTools" "E:\PowershellEXE\General_Test_4\SRC\SystemTools\ModuleManager\Modules"
+  #>
+  [CmdletBinding()]
+ Param(
+  		[  Parameter(Mandatory=$true)][string]$ModuleName,
+    	[  Parameter(Mandatory=$true)][string]$StoragePath
+  	)
+    iex "Find-Module -name $ModuleName | Save-Module -Path `"$StoragePath`""
+}
+
+
+function global:OpenSavedModule {
+  <#
+  .SYNOPSIS
+		Opens a saved module by a given path.
+  .DESCRIPTION
+		Intended to help Load Modules to be used within WinPE.
+  .EXAMPLE
+    Example 1.
+		OpenSavedModule
+  #>
+  [CmdletBinding()] Param(
+		[  Parameter(Mandatory=$true)][string]$DriveLetter
+	)
+    $parent = [System.IO.Path]::GetTempPath()
+    [string] $name = [System.Guid]::NewGuid()
+    return New-Item -ItemType Directory -Path (Join-Path $parent $name)
+}
+
+
+
+
+function global:ParametersOfList {
+  <#
+  .SYNOPSIS
+		example code for filtering a list of a given type.
+  .DESCRIPTION
+		simple code snippet to help convey how to's
+  .EXAMPLE
+    Example 1.
+		ParametersOfList
+  #>
+  [CmdletBinding()] Param(
+		[Parameter(Mandatory=$true)][hashtable[]]$StringList
+	)
+  write-host $StringList
+  write-host $StringList.getType().fullname
+}
 
 
 
@@ -51,20 +159,57 @@ Function global:Using_WinPE
   return Test-Path -Path Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlset\Control\MiniNT
 }
 
+Function global:PWSH_Version
+{
+  <#
+  .SYNOPSIS
+
+  .DESCRIPTION
+
+  .EXAMPLE
+    Example 1.
+      $PWSH_Version = PWSH_Version
+    Example 2.
+  #>
+  #return pwsh -command "get-host | select-object version"
+}
+
+Function global:PASSTo_PWSH_Test
+{
+  <#
+  .SYNOPSIS
+
+  .DESCRIPTION
+
+  .EXAMPLE
+    Example 1.
+      $PWSH_Version = PWSH_Version
+    Example 2.
+  #>
+  $Value = "String"
+ # pwsh -command "write-host $Value"
+  #pwsh -command "write-host $($Value.getType().FullName)"
+  #[ErrorHandling]$ErrorHandling = [ErrorHandling]::new($Options)
+  #pwsh -command "write-host $($ErrorHandling.getType().FullName)"
+
+  #return pwsh -command "write-host $Value"
+}
+
 
 
 Function global:GetDrivePermissions {
 	<#
 	.SYNOPSIS
-		Simple function that Changes the size of the window to X Y values.
+		Simple function that checks if current script has permisions for a given drive.
+		If no drive permissions are present, the script will call EngNet.bat on the network.
 	.DESCRIPTION
 
 	.EXAMPLE
 		Example 1.
 		Set_WindowSize 100 40
 	#>
-	Param(
-		[Parameter(Mandatory=$true)][string]$DriveLetter
+  [CmdletBinding()] Param(
+		[  Parameter(Mandatory=$true)][string]$DriveLetter
 	)
 
 	try
@@ -104,25 +249,55 @@ Function global:GetDrivePermissions {
 
 
 
+#https://serverfault.com/questions/11879/gaining-administrator-privileges-in-powershell#:~:text=If%20you%20want%20to%20always,select%20%22Run%20as%20Administrator%22.&text=This%20is%20how%20to%20set,anytime%2C%20from%20any%20PowerShell%20session!
+# PowerShell 5 (old version built into windows)
+function GoAdmin { Start-Process powershell –Verb RunAs }
+
+# PowerShell Core (the latest PowerShell version from GitHub)
+#function GoAdmin { Start-Process pwsh –Verb RunAs }
+
 
 
 #$args[0]
 
 
 
+Function Remove-InvalidFileNameChars {
+  param(
+    [Parameter(Mandatory=$true,
+      Position=0,
+      ValueFromPipeline=$true,
+      ValueFromPipelineByPropertyName=$true)]
+    [String]$Name
+  )
 
+  $invalidChars = [IO.Path]::GetInvalidFileNameChars() -join ''
+  $re = "[{0}]" -f [RegEx]::Escape($invalidChars)
+  return ($Name -replace $re,$(Get-Random -Maximum 100))
+}
 
 
 
 function global:MakePath {
-	Param(
-		[Parameter(Mandatory=$true)][string]$Path
-	)
-	if(!(Test-Path -Path $Path ))
-	{
-		New-Item -ItemType Directory -Force -Path $Path
-	}
-	return $Path
+    [CmdletBinding()] Param(
+      [Parameter(Mandatory=$true)][string]$Path
+    )
+  try{
+    if(!(Test-Path -Path $Path ))
+    {
+      return New-Item -ItemType Directory -Force -Path $Path
+    }
+  }
+  catch{
+    $path =$($Path | % {$ASCIIFirst[$_]})
+    if(!(Test-Path -Path $path))
+    {
+      return New-Item -ItemType Directory -Force -Path $Path
+    }
+  }
+
+	write-host "MakePath returning:$($Path.ToString())"
+	return $Path.ToString()
 }
 
 
@@ -147,7 +322,7 @@ Function global:Parse-IniFile ($File) {
 		Write-Warning "ini File:$File missing"
 		Display_Error_Message -Mode "Failure" -Message "ini File:$File missing" -Message2 "Please Contact Engineering" -ClearScreen $False
 	}
-
+	start-sleep 2
 }
 
 
@@ -163,7 +338,7 @@ Function global:READ_SETENV{
 	.EXAMPLE
 		Example 1.
 	#>
-	Param(
+  [CmdletBinding()] Param(
 		[String]$Path="r:\setenv.cmd"
 	)
 
@@ -191,21 +366,22 @@ Function global:READ_SETENV{
 
 
 
-function CheckParam{
+function Check-Param{
 	<#
 	.SYNOPSIS
-
+		Check-Param is used to validate a Variable conatins data with given characteristics.
 	.DESCRIPTION
 
 	.EXAMPLE
 		Example 1.
 
 	#>
-	Param(
+  [CmdletBinding()] Param(
 		$Value,
-		[int]$InputLength    = -1,
-		[string]$CastType    = "string",
-		[boolean]$Write_Host = $False
+		[int]$CharacterLength    = -1,
+		[Type]$CastType   	= "string",
+		[boolean]$Write_Host 	= $False,
+		[switch]$NonNull
 	)
 
 	$SupportedCastType = @("string","int")
@@ -223,11 +399,11 @@ function CheckParam{
 
 
 
-	if (($InputLength -ne -1) -and ($Value.Length -ne $InputLength))
+	if (($CharacterLength -ne -1) -and ($Value.Length -ne $CharacterLength))
 	{
 		if($Write_Host)
 		{
-			Write-Host "Invalid String Length!, Expected Length ($InputLength) but received ($($Value.Length))"
+			Write-Host "Invalid String Length!, Expected Length ($CharacterLength) but received ($($Value.Length))"
 			Write-Host "Entered Value: '$Value'"
 		}
 
@@ -275,7 +451,7 @@ Function global:RequestValue{
 	.EXAMPLE
 		$Value = RequestValue -Message "Please Enter Value:"
 	#>
-	Param(
+	  [CmdletBinding()] Param(
 		[String]$Mode           = "Attention",
 		[String]$Message        = "Missing Prompt",
 		$PassThroughValue       = $NULL,
@@ -286,7 +462,7 @@ Function global:RequestValue{
 	)
 	#$Type.ToLower()
 
-	if(($PassThroughValue -ne $NULL) -and (CheckParam -Value $PassThroughValue -InputLength $InputLength -CastType $CastType -Write_Host $False))
+	if(($PassThroughValue -ne $NULL) -and (Check-Param -Value $PassThroughValue -InputLength $InputLength -CastType $CastType -Write_Host $False))
 	{
 		Write-Host "$Message : $PassThroughValue"
 		return $PassThroughValue
@@ -307,7 +483,7 @@ Function global:RequestValue{
 		}
 
 
-		if ($CorrectInput.ToLower() -eq "y" -and (CheckParam -Value $GatheredInput -InputLength $InputLength -CastType $CastType -Write_Host $True))
+		if ($CorrectInput.ToLower() -eq "y" -and (Check-Param -Value $GatheredInput -InputLength $InputLength -CastType $CastType -Write_Host $True))
 		{
 			Write-Host "$Message : $GatheredInput" -InformationAction Ignore
 			return $GatheredInput
@@ -370,9 +546,9 @@ Function global:GetUSBDevices{
 
 
 Function CompareCheckSums{
-	Param(
-		[Parameter(Mandatory=$true)]$HashA,
-		[Parameter(Mandatory=$true)]$HashB
+	  [CmdletBinding()] Param(
+		[  Parameter(Mandatory=$true)]$HashA,
+		[  Parameter(Mandatory=$true)]$HashB
 	)
 	<#
 	.SYNOPSIS
@@ -415,8 +591,6 @@ function Get-FolderHash ($folder){
 
 	try
 	{
-		write-host $folder
-		pause
 		dir $folder -Recurse | ?{!$_.psiscontainer} | %{[Byte[]]$contents += [System.IO.File]::ReadAllBytes($_.fullname)}
 		$hasher = [System.Security.Cryptography.SHA1]::Create()
 		[string]::Join("",$($hasher.ComputeHash($contents) | %{"{0:x2}" -f $_}))
@@ -429,7 +603,53 @@ function Get-FolderHash ($folder){
 }
 
 
+function Get_FolderHash_MD5 ($folder){
+	<#
+	.SYNOPSIS
 
+	.DESCRIPTION
+
+	.EXAMPLE
+		Get-FolderHash "C:\CustomFolder"
+	#>
+
+	try
+	{
+		dir $folder -Recurse | ?{!$_.psiscontainer} | %{[Byte[]]$contents += [System.IO.File]::ReadAllBytes($_.fullname)}
+		$hasher = [System.Security.Cryptography.MD5]::Create()
+		return [string]::Join("",$($hasher.ComputeHash($contents) | %{"{0:x2}" -f $_}))
+	}
+	catch
+	{
+		#Display_Error_Message -message "Powershell's Get-FolderHash Failed"
+		#Display_Error_Message -Mode "Failure" -Message "Please Contact Engineering" -Message2 "Powershell's Get-FolderHash Failed"
+	}
+}
+
+function Get_FileHash_MD5 ($File){
+	<#
+	.SYNOPSIS
+
+	.DESCRIPTION
+
+	.EXAMPLE
+		Get-FolderHash "C:\CustomFolder"
+	#>
+  #get-content $File | ?{!$_.psiscontainer} | %{[Byte[]]$contents += [System.IO.File]::ReadAllBytes($_.fullname)}
+  #get-content $File | ?{!$_.psiscontainer} | $_.fullname # %{[Byte[]]$contents += [System.IO.File]::ReadAllBytes($_)}
+  [byte[]]$bytes = Get-Content $file -AsByteStream
+  $hasher = [System.Security.Cryptography.MD5]::Create()
+  return [string]::Join("",$($hasher.ComputeHash($bytes) | %{"{0:x2}" -f $_}))
+	try
+	{
+
+	}
+	catch
+	{
+		Display_Error_Message -message "Powershell's Get-FolderHash Failed"
+		#Display_Error_Message -Mode "Failure" -Message "Please Contact Engineering" -Message2 "Powershell's Get-FolderHash Failed"
+	}
+}
 
 
 
@@ -448,14 +668,14 @@ function SaveNewFolderStructureObject{
 
 #| Export-Clixml .\FolderStruct.xml
 function GetFolderStructureObject{
-	Param(
+	  [CmdletBinding()] Param(
 		[string]$Path
 	)
 	return Get-ChildItem "$Path" -Recurse -Directory
 }
 
 function CompareObjects{
-	Param(
+	  [CmdletBinding()] Param(
 		[string]$Object1,
 		[string]$Object2
 	)
@@ -470,13 +690,15 @@ function CompareObjects{
 		return $False
 	}
 }
+<#
 
+#>
 <#
 CompareFolderStructure -Path1 -Path2
 	Returns $True if Folderstructure match
 #>
 function CompareFolderStructure{
-	Param(
+	  [CmdletBinding()] Param(
 		[string]$Path1,
 		[string]$Path2
 	)
@@ -515,7 +737,7 @@ function SaveNewHashValue{
 
 
 function VerifyHASH{
-	Param(
+	  [CmdletBinding()] Param(
 		[string]$Path
 	)
 	#CompareHash -Path $Path
@@ -578,7 +800,7 @@ function VerifyHASH{
 
 #Archived_FolderStructure
 function VerifyFolderStructure{
-	Param(
+	  [CmdletBinding()] Param(
 		[string]$Path
 	)
 	# Set Values for Folder Compare
@@ -601,9 +823,9 @@ function VerifyFolderStructure{
 
 #PXE_XCOPY -Source S:\Path -Destination D:\
 Function Verify_XCOPY{
-	Param(
-		[Parameter(Mandatory=$true)][String]$Source,
-		[Parameter(Mandatory=$true)][String]$Destination
+	  [CmdletBinding()] Param(
+		[  Parameter(Mandatory=$true)][String]$Source,
+		[  Parameter(Mandatory=$true)][String]$Destination
 	)
 
 	Display_Message -Mode "Information" -Message "Testing USB Checksum"
@@ -641,9 +863,9 @@ Function Verify_XCOPY{
 #PXE_XCOPY -Source S:\Path -Destination D:\
 #PXE_XCOPY
 Function PS_XCOPY{
-	Param(
-		[Parameter(Mandatory=$true)][String]$Source,
-		[Parameter(Mandatory=$true)][String]$Destination
+	  [CmdletBinding()] Param(
+		[  Parameter(Mandatory=$true)][String]$Source,
+		[  Parameter(Mandatory=$true)][String]$Destination
 	)
 	<#
 	.SYNOPSIS
@@ -654,7 +876,8 @@ Function PS_XCOPY{
 		PXE_XCOPY $Source $Destination
 	#>
 
-<# 	try
+
+<#  	try
 	{
 		if(!(Test-Path -Path $Destination ))
 		{
@@ -668,20 +891,22 @@ Function PS_XCOPY{
 	catch
 	{
 		Display_Error_Message -message "Failed to create Destination folder:$Destination"
-	}
- #>
+	} #>
+
 
 
 	try
 	{
-		xcopy $Source $Destination /E /I /H /Y
+		xcopy $Source $Destination /E /I /H /K /Y
+		#Copy-Item -Path $Source -Destination $Destination -recurse -Force
 	}
 	catch
 	{
 		try
 		{
 			$lastexitcode = 0
-			xcopy $Source $Destination"\" /E /I /H /Y
+			xcopy $Source $Destination"\" /E /I /H /K /Y
+			#Copy-Item -Path $Source -Destination $Destination"\" -recurse -Force
 		}
 		catch
 		{
@@ -691,13 +916,122 @@ Function PS_XCOPY{
 
 }
 
+#http://jongurgul.com/blog/get-stringhash-get-filehash/
+Function Get-StringHash([String] $String,$HashName = "MD5"){
+	$StringBuilder = New-Object System.Text.StringBuilder
+	[System.Security.Cryptography.HashAlgorithm]::Create($HashName).ComputeHash([System.Text.Encoding]::UTF8.GetBytes($String))|%{
+		[Void]$StringBuilder.Append($_.ToString("x2"))
+	}
+	return $StringBuilder.ToString()
+}
 
 
+Function Get-FolderHash_1([String] $Destination,$HashName = "MD5")
+{
+	#( Get-ChildItem $Destination -Recurse | Get-FileHash -algorithm $HashName).hash
+	$List = (Get-ChildItem $Destination -Recurse) | where-object{ Test-Path -Path $_ -PathType Leaf }
+	#$List = gci -File
+	$XCOPY_CodeBlock = {
+	  [CmdletBinding()] Param(
+			$SystemImportLocation,
+			$Directory
+		)
+		#write-host "$SystemImportLocation - $Directory "
+		import-module "$SystemImportLocation\SystemTools.ps1" >$null 2>&1
+		#$HASH = $(Get-FileHash -Path "$Directory").hash
+    [byte[]]$bytes = Get-Content $Directory -AsByteStream
+    $hasher = [System.Security.Cryptography.MD5]::Create()
+    write-host $hasher
+    if ($null -eq $bytes)
+    {
+      return ""
+    }
+    $HashedBytes = $($hasher.ComputeHash([byte[]]$bytes))
+    if ($null -eq $HashedBytes)
+    {
+      return ""
+    }
+    return [string]::Join("",$($HashedBytes | %{"{0:x2}" -f $_}))
+    #eturn "$HASH"
+		#PS_XCOPY_CheckSum -Source "$Source\*" -Destination "$($DriveLetter):" -Source_HashCode $Source_HashCode
+	}
+
+  #Get-FileHash -Path "E:\PowershellEXE\General_Test_4\SRC\Tests\General\FolderHash\Source\Test.txt"
+	#PS_XCOPY_FileCount -Source "$($Source)*" -Destination "$($this.AssignedLetter):\"
+	#return ""
+  $JOBS = @()
+  write-host "Files given: $List"
+
+  pause
+  #$psCredentials = #New-Object PSCredential #-ArgumentList @("Username", (ConvertTo-SecureString $password -AsPlainText -Force))
+  #$psCredentials = Get-Credential
+  foreach($File in $List)
+  {
+    write-host "Starting Thread for File: $File"
+    $JOBS += Start-Job -scriptblock $XCOPY_CodeBlock -ArgumentList "$global:DIR", "$File" #-Credential $psCredentials
+  }
+  $JobsRecieved = 0
+  $MergedString="";
+  foreach($JOB in $JOBS)
+  {
+
+    $MergedString += $JOB | Wait-Job | Receive-Job #-Keep #6>&1
+    $JobsRecieved+=1
+    write-host $JobsRecieved
+    CheckForErrors -Message "Please Contact Engineering!! `n`t failed to Join Jobs using `"`| wait-job`" "
+  }
+  CheckJobsForErrors $JOBS
+	#write-host "hash:$MergedString"
+  #Get-StringHash($MergedString)
+
+	$Hash = Get-StringHash($MergedString,"MD5").toString() -replace " ",""
+	return $Hash -replace " ",""
+}
+
+Function Get-FolderHash_2([String] $Destination,$HashName = "MD5")
+{
+  #( Get-ChildItem $Destination -Recurse | Get-FileHash -algorithm $HashName).hash
+	$List = ( Get-ChildItem $Destination -Recurse)
+		$XCOPY_CodeBlock = {
+		  [CmdletBinding()] Param(
+				$SystemImportLocation,
+				$Directory
+			)
+		#write-host "$SystemImportLocation - $Directory "
+		import-module "$SystemImportLocation\SystemTools.ps1" >$null 2>&1
+		$HASH = $(Get-FileHash -Path "$Directory").hash
+    return "$HASH"
+		#PS_XCOPY_CheckSum -Source "$Source\*" -Destination "$($DriveLetter):" -Source_HashCode $Source_HashCode
+	}
+
+  #Get-FileHash -Path "E:\PowershellEXE\General_Test_4\SRC\Tests\General\FolderHash\Source\Test.txt"
+	#PS_XCOPY_FileCount -Source "$($Source)*" -Destination "$($this.AssignedLetter):\"
+	#return ""
+  $JOBS = @()
+  #write-host "Files given: $List"
+
+  #$psCredentials = #New-Object PSCredential #-ArgumentList @("Username", (ConvertTo-SecureString $password -AsPlainText -Force))
+
+  $JobsRecieved = 0
+  $MergedString="";
+  foreach($File in $List)
+  {
+    #write-host "Starting Thread for File: $File"
+    $MergedString += $(Get-FileHash -Path "$File").hash
+  }
+
+	write-host "hash:$MergedString"
+  #Get-StringHash($MergedString)
+  pause
+
+	$Hash = Get-StringHash($MergedString,"MD5").toString() -replace " ",""
+	return $Hash -replace " ",""
+}
 
 Function PXE_XCOPY{
-	Param(
-		[Parameter(Mandatory=$true)][String]$Source,
-		[Parameter(Mandatory=$true)][String]$Destination
+	  [CmdletBinding()] Param(
+		[  Parameter(Mandatory=$true)][String]$Source,
+		[  Parameter(Mandatory=$true)][String]$Destination
 	)
 	<#
 	.SYNOPSIS
@@ -744,10 +1078,28 @@ Function PXE_XCOPY{
 
 }
 
+Function SetGetPath{
+	  [CmdletBinding()] Param(
+		[  Parameter(Mandatory=$true)][String]$Path
+	)
+
+	if(!(Test-Path -Path $Path))
+    {
+		New-Item -ItemType Directory -Force -Path $Path
+    }
+    return $Path
+}
+
+
+
+
+
+#Write-Error -Message "Houston, we have a problem."
 Function PS_XCOPY_CheckSum{
-	Param(
+	  [CmdletBinding()] Param(
 		[Parameter(Mandatory=$true)][String]$Source,
 		[Parameter(Mandatory=$true)][String]$Destination,
+
 		[Parameter(Mandatory=$true)][String]$Source_HashCode
 	)
 	<#
@@ -765,37 +1117,41 @@ Function PS_XCOPY_CheckSum{
 
 #	PXE_XCOPY $Source $Destination
 #	$Source_Hash  = Get-FolderHash $Destination
-	
+	#Display_Error_Message -Mode "Information" -Message "Failed to move Files " -Message2 "Error: $error"
 	while($AttemptXCOPY)
 	{
 		try
 		{
 			PS_XCOPY -Source $Source -Destination $Destination
 			#CheckForErrors -Message "Please Contact Engineering `n`t  XCOPY Failed"
-			
 
-			$Destination_HashCode = Get-FolderHash "$($Destination)"
+
+			#$Destination_HashCode  = ( Get-ChildItem $Destination -Recurse | Get-FileHash).Hash
+			#$CheckSum_LIST = ( Get-ChildItem $Destination -Recurse | Get-FileHash -algorithm md5).hash
+			$Destination_HashCode = Get-FolderHash($Destination)
+			#$Destination_HashCode = Get-FolderHash "$($Destination)"
 			if((CompareCheckSums $Source_HashCode $Destination_HashCode))
 			{
 				$AttemptXCOPY = $False
 				write-host "Files were copied successfully"
-				write-host "`tSource_HashCode:      $Source_HashCode" 
+				write-host "`tSource_HashCode:      $Source_HashCode"
 				write-host "`tDestination_HashCode: $Destination_HashCode"
 			}
 			else
 			{
 				#Clear Results Folder
+				Write-Error -Message "Failed to move Files. Source_HashCode: `"$Source_HashCode`" Destination_HashCode: `"$Destination_HashCode`""
 				Get-ChildItem -Path $Destination -Include *.* -File -Recurse | foreach { $_.Delete()}
-				XCopyAttempts+=1
-				
+				$XCopyAttempts+=1
 			}
-			
+
 			#throw "Fail"
 			#break
 		}
 		catch
 		{
-			Display_Message -Mode "Information" -Message "Failed to move Files $XCopyAttempts / $MaxAttempts Attempts" -Message2 "Error: $error"
+			Write-Error -Message "Failed to move Files. Source: `"$Source`" Destination: `"$Destination`""
+			Display_Message -Mode "Information" -Message "Failed to move Files $XCopyAttempts / $MaxAttempts Attempts" -Message2 "Source: $Source Destination: $Destination"
 
 			#Start-Sleep -Seconds 2
 			$XCopyAttempts += 1
@@ -804,11 +1160,86 @@ Function PS_XCOPY_CheckSum{
 
 		if ($XCopyAttempts -ge $MaxAttempts)
 		{
-			Display_Error_Message -Mode "Failure" -Message "Please Contact Engineering" -Message2 "Failed to move Files $XCopyAttempts / $MaxAttempts Attempts" -Message2 "Error: $error"
+			Write-Error -Message "Failed to move Files. Source: `"$Source`" Destination: `"$Destination`""
+			Display_Error_Message -Mode "Failure" -Message "Please Contact Engineering `n Failed to move Files $XCopyAttempts / $MaxAttempts Attempts" -Message2 "`tSource: $Source `n`tDestination: $Destination"
 		}
 	}
-	
+
 }
 
 
+#( Get-ChildItem c:\MyFolder | Measure-Object ).Count
+Function PS_XCOPY_FileCount{
+	  [CmdletBinding()] Param(
+		[  Parameter(Mandatory=$true)][String]$Source,
+		[  Parameter(Mandatory=$true)][String]$Destination
+	)
+	<#
+	.SYNOPSIS
 
+	.DESCRIPTION
+
+	.EXAMPLE
+		PXE_XCOPY
+	#>
+	$XCopyAttempts = 0
+	$MaxAttempts   = 3
+	$AttemptXCOPY  = $True
+	$Verify_CheckSum  = $True
+
+#	PXE_XCOPY $Source $Destination
+#	$Source_Hash  = Get-FolderHash $Destination
+	#Display_Error_Message -Mode "Information" -Message "Failed to move Files " -Message2 "Error: $error"
+	while($AttemptXCOPY)
+	{
+		try
+		{
+			PS_XCOPY -Source $Source -Destination $Destination
+			#CheckForErrors -Message "Please Contact Engineering `n`t  XCOPY Failed"
+
+			#dir -recurse |  ?{ $_.PSIsContainer } | %{ Write-Host $_.FullName (dir $_.FullName | Measure-Object).Count }
+			$Source_FileCount      = ( Get-ChildItem $Source -Recurse | Measure-Object ).Count
+			$Destination_FileCount = ( Get-ChildItem $Destination -Recurse | Measure-Object ).Count
+
+
+			write-host "`tSource_FileCount:      $Source_FileCount"
+			write-host "`tDestination_FileCount: $Destination_FileCount"
+			#pause
+			if($Source_FileCount -eq $Destination_FileCount)
+			{
+				$AttemptXCOPY = $False
+				write-host "Files were copied successfully"
+				write-host "`tSource_FileCount:      $Source_FileCount"
+				write-host "`tDestination_FileCount: $Destination_FileCount"
+				#pause
+			}
+			else
+			{
+				#Clear Results Folder
+				Get-ChildItem -Path $Destination -Include *.* -File -Recurse | foreach { $_.Delete()}
+				$XCopyAttempts+=1
+
+			}
+
+			#throw "Fail"
+			#break
+		}
+		catch
+		{
+			#Write-Error -Message "Failed to move Files. Source: `"$Source`" Destination: `"$Destination`""
+			Display_Message -Mode "Information" -Message "Failed to move Files $XCopyAttempts / $MaxAttempts Attempts" -Message2 "Source: $Source Destination: $Destination"
+
+			#Start-Sleep -Seconds 2
+			$XCopyAttempts += 1
+		}
+
+
+		if ($XCopyAttempts -ge $MaxAttempts)
+		{
+			Write-Error -Message "Failed to move Files. Source: `"$Source`" Destination: `"$Destination`""
+			Display_Error_Message -Mode "Failure" -Message "Please Contact Engineering" -Message2 "Failed to move Files $XCopyAttempts / $MaxAttempts Attempts" -Message3 "Source: $Source Destination: $Destination"
+		}
+		CheckForErrors -Message "Please Contact Engineering!! `n`t  PS_XCOPY_FileCount Failed"
+	}
+
+}
