@@ -188,3 +188,127 @@ Function global:Display_Message{
 	Start-Sleep -Seconds $SleepFor
 
 }
+
+
+
+function Validate_Param{
+	<#
+	.SYNOPSIS
+		Validate_Param is used to validate a Variable conatins data with given characteristics.
+	.DESCRIPTION
+    returns $True when value is accepted, and $False when not
+	.EXAMPLE
+		Example 1.
+
+	#>
+  [CmdletBinding()] Param(
+		[Parameter(ValueFromPipeline)]$Value,
+		[int]$ValidateLength    = -1,
+		[string]$ValidateType      = "",
+		[boolean]$Write_Host 	   = $True,
+		[switch]$StringToInteger
+	)
+
+  #Write-Host "Invalid ValidateType: `"$ValidateType`""
+  #write-host $($($Value.getType().fullname) -eq $ValidateType -or $($Value.getType().name) -eq $ValidateType)
+
+
+  if($ValidateType -ne "")
+  {
+    if(-not $($($Value.getType().fullname) -eq $ValidateType -or $($Value.getType().name) -eq $ValidateType))
+    {
+      if($Write_Host)
+      {
+        Write-Host "Invalid ValidateType: `"$ValidateType`""
+        Write-Host "Provided Fullname: `"$($Value.getType().fullname)`""
+        Write-Host "Provided name: `"$($Value.getType().name)`""
+      }
+      return $False
+    }
+  }
+
+  if($StringToInteger)
+  {
+    $alphabet=@()
+    65..90|foreach-object{$alphabet += [char]$_}
+    #write-host $Value
+    #write-host $alphabet
+    #write-host $(ContainsCaracters -String $Value -Characters $alphabet)
+    if($(ContainsCaracters -String $Value -Characters $alphabet))
+    {
+      #write-host "Validate_Param:$False"
+      return $False
+    }
+     #'[^a-zA-Z]'
+  }
+
+
+	if (($ValidateLength -ne -1) -and ($Value.Length -ne $ValidateLength))
+	{
+		if($Write_Host)
+		{
+			Write-Host "Invalid String Length!, Expected Length ($ValidateLength) but received ($($Value.Length))"
+			Write-Host "Entered Value: '$Value'"
+		}
+
+		return $False
+	}
+
+  #ContainsCaracters($Value,"")
+
+
+
+	return $True
+}
+
+
+
+
+
+
+#TODO FIX -ValidateType Integer
+Function global:RequestValue{
+	<#
+	.SYNOPSIS
+		Function to request data from the user.
+	.DESCRIPTION
+		Preforms some InputLength Checking, If $InputLength flag set to -1, input length is ignored.
+		Supported Types:
+			-'String'  : String
+			-'int'     : Integer
+			-'float'   : float
+	.EXAMPLE
+		$Value = RequestValue -Message "Please Enter Value:"
+	#>
+	  [CmdletBinding()] Param(
+		[Parameter(ValueFromPipeline)]$PassThroughValue       = $NULL,
+		[String]$Mode            = "Attention",
+		[String]$Message         = "Missing Prompt",
+		[int]$InputLength        = -1,
+		[string]$CastType        = "string"
+
+	)
+	#$Type.ToLower()
+
+	if(($PassThroughValue -ne $NULL) -and (Validate_Param -Value $PassThroughValue -InputLength $InputLength -CastType $CastType -Write_Host $False))
+	{
+		Write-Host "$Message : $PassThroughValue"
+		return $PassThroughValue
+	}
+
+	Set_ScreenMode -Mode "$Mode"
+	$GatherInput = $True
+	while($GatherInput)
+	{
+		#Write-Host " "
+		$GatheredInput = Read-Host -Prompt $Message
+
+		if ((Validate_Param -Value $GatheredInput -InputLength $InputLength -CastType $CastType -Write_Host $True))
+		{
+			Write-Host "$Message : $GatheredInput" -InformationAction Ignore
+			return $GatheredInput
+		}
+
+	}
+
+}
