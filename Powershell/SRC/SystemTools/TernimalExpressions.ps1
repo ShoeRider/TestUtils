@@ -156,7 +156,7 @@ Function global:Display_Message{
 		[String]$Message2    = "   ",
 		[String]$Message3    = "   ",
 		$ErrorMessages       = $False,
-		$Pause               = $False,
+		[switch]$Pause,
 		$SleepFor            = 3,
 		[bool]$ClearScreen   = $True,
 		[bool]$SetScreenMode = $True
@@ -178,15 +178,12 @@ Function global:Display_Message{
 	write-host "       $Message3 `n"
 	write-host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`n"
 
-
-
 	if($Pause)
 	{
 		Pause
 	}
 
 	Start-Sleep -Seconds $SleepFor
-
 }
 
 
