@@ -1,15 +1,3 @@
-# ==========================================================
-# DESCRIPTION:
-#
-# ==========================================================
-# Set-ExecutionPolicy -ExecutionPolicy Unrestricted
-
-$Working_Archive = ""
-# ==========================================================
-# Command Line Parameters
-# Import:
-#     Import-Module DiskManagement.ps1
-# ==========================================================
 
 
 function Disable_AutoMount{
@@ -26,125 +14,120 @@ automout enable
 )|diskpart)
 }
 
-class Disk {
+
+
+function GetFileSystem{
+((@"
+list volume
+"@
+)|diskpart)
+}
+
+
+class DiskPartition : FileSystem  {
     <#
   	.SYNOPSIS
 			Disk class is a class to manage individual Disks, by
   	.DESCRIPTION
 
   	.EXAMPLE1
-			$Disks = get-disk
-			[Disk]$global:Disk = [Disk]::new($Disk[0])
+			[DiskPartition]$global:DiskPartition = [DiskPartition]::new($DiskNumber,$PartitionNumber)
 
   	#>
-	$AssignedLetter
+	$DiskNumber
+	$PartitionNumber
+	$PartitionObject
+	$PartitionLetter
+	
 
-	$Disk
-
-	Disk(
-		[Microsoft.Management.Infrastructure.CimInstance]$Disk,
-		[hashtable]$DiskFormat
+	
+	DiskPartition(
+		[int]$DiskNumber,
+		[int]$PartitionNumber,
+		$PartitionLetter
 		){
-			$this.Disk = $Disk
-			$DiskFormat = @{
-				"PartitionStyle"     = "MBR";
-				"FileSystem"         = "NTFS";
-				"AllocationUnitSize" = 4096;
-				"NewFileSystemLabel" = "Win_PE_Console"
-			}
+			$this.__init__($DiskNumber,$PartitionNumber,$PartitionLetter)
     }
-		Disk(){
-
-	  }
 
 
-	[string]GetAvailableDriveLetter(){
-		if ($Global:PS_Version -eq 5)
+	DiskPartition(
+		[int]$DiskNumber,
+		[int]$PartitionNumber
+		){
+			$Letter = GetAvailableDriveLetter
+			$this.__init__($DiskNumber,$PartitionNumber,$Letter)
+    }
+
+	[void]__init__(
+	[int]$DiskNumber,
+	[int]$PartitionNumber,
+	$PartitionLetter
+	){
+		$this.DiskNumber            = $DiskNumber
+		$this.PartitionNumber       = $PartitionNumber
+		$this.PartitionObject       = Get-Partition -disknumber $DiskNumber -partitionnumber $PartitionNumber | Set-Partition -NewDriveLetter $PartitionLetter
+		$this.PartitionLetter = $PartitionLetter
+		Display_Host "Searching for Partition with `n`tDiskNumber :$($this.DiskNumber) `n`tPartition:$($this.PartitionNumber)`n`tPartitionLetter:$($this.PartitionLetter)"
+		$this.UsablePartition()
+    }
+	
+	[boolean] UsablePartition(){
+		if($this.PartitionObject.IsSystem)
 		{
-			$AllLetters = 65..90 | ForEach-Object {[char]$_}
-
-			#get-wmiobject deprecated
-			$UsedLetters = get-wmiobject win32_logicaldisk | select -expand deviceid
-		  #$UsedLetters = Get-CimInstance -ClassName Win32_Service -Filter "name='LISA_43_Dev_Batch'" | select Name,DisplayName,StartMode,State,StartName,SystemName,Description |Format-Table -AutoSize
-			$FreeLetters = $AllLetters | Where-Object {$UsedLetters -notcontains $_}
-			#write-host $FreeLetters
-			return $FreeLetters | select-object -first 1
+			#Critical Errors may occur if Continuing on Boot Partition, and ReImaging over Current Image
+			Display_Error_Message -message "Given Partition is a Boot Partition! " -Options = @("View","Detailed","Exit")
+			return $False
 		}
-		elseif($Global:PS_Version -eq 7)
-		{
-			$AllLetters = 65..90 | ForEach-Object {[char]$_}
-
-			#get-wmiobject deprecated
-			#$UsedLetters = get-wmiobject win32_logicaldisk | select -expand deviceid
-		  $UsedLetters = Get-CimInstance -ClassName Win32_Service -Filter "name='LISA_43_Dev_Batch'" | select -expand deviceid
-			$FreeLetters = $AllLetters | Where-Object {$UsedLetters -notcontains $_}
-			#write-host $FreeLetters
-			return $FreeLetters | select-object -first 1
-		}
-		Display_Error_Message -Message "Please Contact Engineering" -Message2 "PS_Version:$Global:PS_Version not supported by Disk.GetAvailableDriveLetter() "
-
-		return ""
-		#Following only filters local Drives
-		#ls function:[d-z]: -n | ?{ !(test-path $_) } | random
+		return $true
 	}
-
-	#Get Non Admin Drives
-	[string]Get_NADDrives(){
-	  Start-Job -Name Get_NADDrives -ScriptBlock ${function:foo}
-		#Invoke-Command -ScriptBlock  -argumentlist "Bye!"
-
-	  #Do other stuff here
-	  return Get-Job -Name Get_NADDrives | Wait-Job | Receive-Job
+	
+	
+	[boolean] ChangeDriveLabel($Label){
+		Set-Volume -NewFileSystemLabel $Label -DriveLetter $this.PartitionLetter
+		return CheckForErrors -Message "Failed to ChangeDriveLabel"
 	}
-
-	[void]PrepDisk(){
-		$DriveLetter = $this.GetAvailableDriveLetter().toString()
-
-		$this.Disk | Clear-Disk -RemoveData -RemoveOEM -Confirm:$false -PassThru
-
-		CheckForErrors -Message "Something unexpected happened"
-		$this.Disk | Initialize-Disk -PartitionStyle MBR >$null 2>&1
-		$global:error.clear()
-
-		$this.Disk | New-Partition -UseMaximumSize -IsActive -DriveLetter $DriveLetter
-		CheckForErrors -Message "Failed to create new partition:New-Partition"
-
-		Format-Volume -FileSystem 'NTFS' -DriveLetter $DriveLetter -AllocationUnitSize 4096
-		CheckForErrors -Message "Failed to Format-Volume"
-
-		Set-Volume -NewFileSystemLabel "Win_PE_Console" -DriveLetter $DriveLetter
-		CheckForErrors -Message "Failed to Set-Volume"
-
-		$this.AssignedLetter = $DriveLetter
+	
+		[boolean] FormatVolume($FileSystem,$BlockSize){
+		$this.FormatVolume($FileSystem,$This.PartitionLetter,$BlockSize)
+		return CheckForErrors -Message "Failed to Format-Volume"
 	}
+	
+	[boolean] FormatVolume($FileSystem,$PartitionLetter,$BlockSize){
+		#$This.PartitionLetter = $PartitionLetter
+		Format-Volume -FileSystem $FileSystem -DriveLetter $this.PartitionLetter -AllocationUnitSize $BlockSize
+		return CheckForErrors -Message "Failed to Format-Volume"
+	}
+	
+	
+	[object] ApplyFolderContents_AsJob($SourcePath){
+		<#
+		.SYNOPSIS
+			Takes $SourcePath, and applies Directories content to Given Disk. (As Job) Returns Job Object to track Job.
+		.DESCRIPTION
 
+		.EXAMPLE
+			ApplyFolderContents_AsJob("/ArchiveFolderPath/")
+		#>
 
-	[object] ApplyFolderContents_AsJob($Source,$Source_HashCode){
-		#-WorkingDirectory "$DIR"
 		$XCOPY_CodeBlock = {
 			Param(
 					$Location,
-					$Source,
-					$Source_HashCode,
+					$SourcePath,
 					$DriveLetter
 				)
-			write-host "$Location - $Source - $DriveLetter"
+			#Display_Host "$Location - $SourcePath - $DriveLetter"
 			import-module "$Location\SystemTools.ps1"
-			PS_XCOPY_FileCount -Source "$Source" -Destination "$($DriveLetter)"
-			#PS_XCOPY_CheckSum -Source "$Source\*" -Destination "$($DriveLetter):" -Source_HashCode $Source_HashCode
+			PS_XCOPY -Source "$SourcePath" -Destination "$($DriveLetter)"
+			#PS_XCOPY_FileCount -Source "$SourcePath" -Destination "$($DriveLetter)"
+			CheckForErrors -Message "Thread Failed to Move Files"
 		}
-		write-host "Starting Thread for Drive: $($this.AssignedLetter)"
-		#PS_XCOPY_FileCount -Source "$($Source)*" -Destination "$($this.AssignedLetter):\"
-		#return ""
-		return Start-Job -scriptblock $XCOPY_CodeBlock -ArgumentList "$global:DIR", "$Source", "$Source_HashCode", "$($this.AssignedLetter):\"
-	}
+		Display_Host "Starting Thread for Drive: $($this.PartitionLetter)"
 
-	[boolean] EquivalentTo([Disk]$GivenDisk){
-			return $($GivenDisk.GetDiskNumber() -eq $this.GetDiskNumber())
+		return Start-Job -scriptblock $XCOPY_CodeBlock -ArgumentList "$global:DIR", "$SourcePath", "$($this.GetDrivePath())"
 	}
-
+	
 	[boolean] ApplyFFU([String]$Source){
-		Param
+
 		<#
 		.SYNOPSIS
 
@@ -157,10 +140,17 @@ class Disk {
 		$DrivePath = "\\.\PhysicalDrive$($this.getDriveNumber())"
 		try
 		{
-			Display_Message -Mode "Information" -Message "Applying FFU IMAGE PLEASE WAIT" -Message2 "Source: $Source" -message3 "Destination: $DrivePath"
+			Display_Message -Mode "Information"                `
+					-Message  "Applying FFU IMAGE PLEASE WAIT" `
+					-Message2 "Source:      $Source"           `
+					-Message3 "Destination: $DrivePath"
+
 			#echo "$DISM /Apply-ffu /ImageFile:$Source /ApplyDrive:$Destination"
 			iex "$DismEXE /Apply-ffu /ImageFile:$Source /ApplyDrive:$DrivePath"
-			CheckForErrors -Message "Please Contact Engineering!!" -Message2 "DISM FFU FAILED"
+
+			CheckForErrors `
+						-Message "Please Contact Engineering!!" `
+						-Message2 "DISM FFU FAILED."
 
 		}
 		catch
@@ -171,53 +161,463 @@ class Disk {
 		}
 		return $True
 	}
-	[string] GetDiskNumber(){
-		return $this.Disk.number
-	}
-	[string] GetSerial(){
-		write-host $this.Disk.SerialNumber.gettype()
-		return Remove-InvalidFileNameChars( $this.Disk.SerialNumber.toString())
-	}
-	[string] GetDiskSize(){
-		return $this.Disk.size
-	}
-	[string] GetFileCount(){
-		return ( Get-ChildItem "$($this.AssignedLetter):\" -Recurse | Measure-Object ).Count
-	}
-	[string] GetVolumeName(){
-		return $(Get-Volume -DriveLetter $this.AssignedLetter).FileSystemLabel
-	}
-	[string] GetFreeSpace(){
-		return $(Get-Volume -DriveLetter $this.AssignedLetter).SizeRemaining
-	}
-	[string] GenerateLog($CID,$Order){
 
-		$Attributes = @{}
+
+	[boolean] CaptureFFU([String]$Source){
+
+		<#
+		.SYNOPSIS
+
+		.DESCRIPTION
+
+		.EXAMPLE
+
+		#>
+		$DismEXE   = "x:\Windows\System32\DISM"
+		$DrivePath = "\\.\PhysicalDrive$($this.getDriveNumber())"
 		try
 		{
-			$Attributes["Serial Number"]     = ($this.GetSerial())
-			$Attributes["Disk Space"] = ($this.GetDiskSize())
-			$Attributes["Free Space"] = ($this.GetFreeSpace())
-			$Attributes["Volume Name"] = $this.GetVolumeName()
-			$Attributes["Files Copied"] = $this.GetFileCount()
-			[string]$Logs = GenerateLog -CID $CID -OrderNumber $Order -DeviceAttributes $Attributes
-			$Logs += " ----------------------------------------------------------------------- `n"
-			$Logs += $this.Disk | Format-List | out-string
-			$Logs += "`n ----------------------------------------------------------------------- `n"
-			#$Logs += Get-ChildItem "$($this.AssignedLetter):\" -recurse
-			$Logs += dir -r "$($this.AssignedLetter):\" | % { if ($_.PsIsContainer) { $_.FullName + "\" } else { $_.FullName } } | Format-List | out-string
-			#$Logs +=
-			$Logs += " ----------------------------------------------------------------------- `n"
-			#write-host $Logs
-			return $Logs
-			#$Logs["FreeSpace"]  = ($this.GetSerial())
-			#$Logs["VolumeName"] = ($this.GetSerial())
+			Display_Message -Mode "Information"                `
+					-Message  "Applying FFU IMAGE PLEASE WAIT" `
+					-Message2 "Source:      $Source"           `
+					-Message3 "Destination: $DrivePath"
 
+			#echo "$DISM /Apply-ffu /ImageFile:$Source /ApplyDrive:$Destination"
+			iex "$DismEXE /Apply-ffu /ImageFile:$Source /ApplyDrive:$DrivePath"
+<#- dism /capture-ffu /imagefile:%directory%:\%stknum%\%stknum%.ffu /capturedrive:\\.\PhysicalDrive0 /name:%stknum% /description:"%customername% FFU Image"
+#>
+			CheckForErrors `
+						-Message "Please Contact Engineering!!" `
+						-Message2 "DISM FFU FAILED."
 
 		}
 		catch
 		{
-			Display_Error_Message -Message "Please Contact Engineering" -Message2 "Failed to save Logs. "
+			Display_Error_Message -Mode "Failure" -Message "DISM Call Failed with: $_ " -Message2 " Dism:$DismEXE /Apply-ffu /ImageFile:$Source /ApplyDrive:$DrivePath"
+			return $False
+			#Write-Error "DISM Call Failed: $_ `n $DISM /Apply-ffu /ImageFile:$Source /ApplyDrive:$Destination"
+		}
+		return $True
+	}
+	
+		
+	[string] GetVolumeSize(){
+		return $($this.PartitionObject).Size
+	}
+		
+	[string] GetFreeSpace(){
+		return $(Get-Volume -DriveLetter $this.PartitionLetter).SizeRemaining
+	}
+	
+	[string] GetUsedSpace(){
+		return	$($this.GetVolumeSize() - $this.GetFreeSpace())
+	}
+	
+	[int] GetBlockSize(){
+		#write-host $(Get-CimInstance -ClassName Win32_Volume)
+		#write-host $($(Get-CimInstance -ClassName Win32_Volume | where-object -property DriveLetter -value "$($this.PartitionLetter):" -eq))
+		#write-host $($(Get-CimInstance -ClassName Win32_Volume | where-object -property DriveLetter -value "$($this.PartitionLetter):" -eq).blockSize)
+		return $($(Get-CimInstance -ClassName Win32_Volume | where-object -property DriveLetter -value "$($this.PartitionLetter):" -eq).blockSize)
+	}
+	
+	[string] GetPartitionStyle(){
+		return ""
+	}
+	
+	[string] GetVolumeLabel(){
+		return $(Get-Volume -DriveLetter $this.PartitionLetter).FileSystemLabel
+	}
+
+	[string]GetFileSystem(){
+		return $(Get-Volume -DriveLetter $this.PartitionLetter).FileSystem
+	}
+
+	[string] GetDrivePath(){
+		return "$($this.PartitionLetter):\"
+	}
+	[string] GetFileCount(){
+		return ( Get-ChildItem "$($this.PartitionLetter):\" -Recurse | Measure-Object ).Count
+	}
+
+	[string] GenerateLog(){
+		$Logs = " ----------------------------------------------------------------------- `n"
+		$Logs += $(EvenSpace "Volume Name:"     $this.GetVolumeLabel()  20)
+		$Logs += $(EvenSpace "Partition Space:" $this.GetVolumeSize()   20)
+		$Logs += $(EvenSpace "Free Space:"      $this.GetFreeSpace()    20)
+		$Logs += $(EvenSpace "Space Used:"      $this.GetUsedSpace()    20)
+		#
+		$Logs += $(EvenSpace "File System:"     $this.GetFileSystem()   20)
+		$Logs += $(EvenSpace "Files Copied:"    $this.GetFileCount()    20)
+		$Logs += $(EvenSpace "Block Size:"      $this.GetBlockSize()    20)
+		$Logs += "`t Please note: The Embedded SN doesnt always match the Drive's Label SN."
+		$Logs += " ----------------------------------------------------------------------- `n"
+		$Logs += $this.Disk | Format-List | out-string
+		$Logs += "`n ----------------------------------------------------------------------- `n"
+		$Logs += dir -r "$($this.PartitionLetter):\" | % { if ($_.PsIsContainer) { $_.FullName + "\" } else { $_.FullName } } | Format-List | out-string
+		$Logs += " ----------------------------------------------------------------------- `n"
+		CheckForErrors -Message "Failed to generate Logs."
+		return $Logs
+		try
+		{
+
+		}
+		catch
+		{
+			Display_Host -Message "$_"
+			Display_Error_Message -Message "Please Contact Engineering" -Message2 "Failed to generate Logs. $_ " -ClearScreen $FALSE
+		}
+		return ""
+	}
+}
+
+
+
+class Disk : FileSystem  {
+    <#
+  	.SYNOPSIS
+			Disk class is a class to manage individual Disks, by
+  	.DESCRIPTION
+
+  	.EXAMPLE1
+			$Disks = get-disk
+			[Disk]$global:Disk = [Disk]::new($Disk[0])
+
+  	#>
+	$Partitions = @()
+	$DiskFormat = @()
+	$Disk
+	$PartitionStyle
+
+	Disk([int]$DriveNumber){
+		write-host "Privided Disk Number:" $DriveNumber
+		if ($DriveNumber -eq $NULL)
+		{
+			Display_Error_Message -Mode "Failure"`
+				-Message "Please Contact Engineering"`
+				-Message2 "Provided Disk Number was NULL." `
+				-Message3 ""
+		}
+		pause
+		$this.Disk = Get-Disk | Where-Object -FilterScript {$_.Number -Eq $DriveNumber}
+		write-host $this.Disk
+		pause
+	  }
+	  
+
+	Disk([Object]$PSDriveObject){
+		if ($PSDriveObject -eq $NULL)
+		{
+			Display_Error_Message -Mode "Failure"`
+				-Message "Please Contact Engineering"`
+				-Message2 "Provided Disk Number was NULL." `
+				-Message3 ""
+		}
+		$this.Disk = $PSDriveObject
+		
+		if($this.Disk.IsSystem )
+		{
+			#Critical Errors may occur if Continuing on Boot Partition, and ReImaging over Current Image
+			Display_Error_Message -message "Given Partition is a Boot Partition! " -Options = @("View","Detailed","Exit")
+		}
+	  }
+
+
+
+
+
+	[void]Clear_Disk(){
+		$this.Disk | Clear-Disk -RemoveData -RemoveOEM -Confirm:$false -PassThru
+		CheckForErrors -Message "Clear-Disk -RemoveData Failed"
+	}
+
+
+	[boolean]InitializeDisk($PartitionStyle){
+		$this.Disk | Initialize-Disk -PartitionStyle $PartitionStyle >$null 2>&1
+		return CheckForErrors -Message "Failed to initialize disk"
+	}
+
+#Returns created Partition Number
+	[object]CleanDisk($PartitionStyle){
+		$ExampleDiskPartitions = @{
+			PartitionStyle     = "MBR";
+	}
+	$this.PartitionStyle = $PartitionStyle
+		$This.Clear_Disk()
+		$This.InitializeDisk($PartitionStyle)
+		#$This.CreateNewPartition($DiskPartitions.PartitionSize,$DiskPartitions.FileSystem,$DiskPartitions.BlockSize)
+		#$This.ChangeDriveLabel($DiskPartitions.Label)
+		return $NULL
+	}
+
+	[object] CreatePartition($PartitionSize){
+		$PartitionLetter = GetAvailableDriveLetter
+		
+		if ($PartitionSize -eq "ALL")
+		{
+			$PartitionInfo = $this.Disk | New-Partition -UseMaximumSize -IsActive -DriveLetter $PartitionLetter
+		}
+		else{
+			Display_Host $($PartitionSize)
+			$PartitionInfo = $this.Disk | New-Partition -Size $PartitionSize -IsActive -DriveLetter $PartitionLetter
+		}
+		
+		return [DiskPartition]::new($this.Disk.Number,$PartitionInfo.PartitionNumber,$PartitionLetter)
+	}
+
+	[boolean] CreateCustomPartition([hashtable]$PartitionFormat){
+		$ExamplePartitionFormat = @{
+									PartitionStyle     = "MBR";
+									PartitionSize      = 100MB;
+									FileSystem         = "NTFS";
+									BlockSize          = 4096;
+									Label              = "Win_PE_Console_1";
+									ApplyZIP           = $NULL;
+							}
+		$GeneratedPartition = $this.CreateCustomPartition($PartitionFormat.PartitionSize,$PartitionFormat.FileSystem,$PartitionFormat.BlockSize,$PartitionFormat.Label)
+		$this.Partitions += $GeneratedPartition
+		return $GeneratedPartition
+	}
+		#Get-Partition -disknumber $DiskNumber -partitionnumber $PartitionNumber | Set-Partition -NewDriveLetter $PartitionLetter
+		
+		
+		
+	[boolean] CreateCustomPartition($PartitionSize,$FileSystem,$BlockSize,$Label){
+		$Partition = $this.CreatePartition($PartitionSize)
+		$Partition.FormatVolume($FileSystem,$BlockSize)
+		$Partition.ChangeDriveLabel($Label)
+		$This.Partitions += $Partition
+		
+		return CheckForErrors -Message "Failed to create new partition:New-Partition"
+	}
+	
+	
+	
+	#Returns created Partition Number
+		[void]ApplyPartitions([array]$DiskPartitions){
+			$DiskPartitions | % {
+				
+				$this.CreateCustomPartition($_)
+			}
+		}
+
+	#Returns created Partition Number
+		[void]ApplyPartitions_AsJob([array]$DiskPartitions){
+			$DiskPartitions | % {
+
+			}
+		}
+		
+		
+#TODO Change Method Name, Name Should indivate Active Disks
+	[boolean] EquivalentTo([Disk]$GivenDisk){
+			return $($GivenDisk.GetDiskNumber() -eq $this.GetDiskNumber())
+	}
+
+
+	
+	[int] GetDiskNumber(){
+		write-host "this.Disk: $($this.Disk)"
+		write-host "this.Disk.number: $($this.Disk.number)"
+		try
+		{
+			return $this.Disk.number
+		}
+		catch
+		{
+			Write-Error -Message "Failed to get `$Disk.GetDiskNumber()"
+
+			Display_Error_Message                                    `
+					-Message  "Please Contact Engineering"            `
+					-Message2 "Failed to get `$Disk.GetDiskNumber()"
+		}
+		return $NULL
+	}
+
+
+
+	[string] GetSerial(){
+		return Replace-InvalidFileNameChars( $this.Disk.SerialNumber.toString())
+	}
+
+
+
+
+	[string]GetHealthStatus(){
+		return $($this.Disk.HealthStatus)
+	}
+
+
+	[string]GetDriveNumber(){
+		write-host $this.Disk
+		write-host $this.Disk.Number
+		pause
+		
+		return $this.Disk.Number #$this.Disk.partitionStyle
+	}
+	
+	[array]GetPartitions(){
+		#write-host $this.Disk.partitionStyle
+		
+		return Get-Partition -disknumber $this.Disk.Number
+	}
+	
+
+	[string]GetPartitionStyle(){
+		#write-host $this.Disk.partitionStyle
+		return $this.Disk.partitionStyle #$this.Disk.partitionStyle
+	}
+
+	[string] GetDiskSize(){
+		return $this.Disk.size
+	}
+
+
+
+
+
+
+
+	[boolean]CheckDisk([hashtable]$DiskFormat,[hashtable[]]$DiskPartitions){
+<# 		Display_Message -Message "Checking Disk,"
+		Display_Host "PartitionStyle: $($this.GetPartitionStyle() -eq $DiskFormat.PartitionStyle)"
+		Display_Host "              Applied  : `"$($this.GetPartitionStyle())`""
+		Display_host "              Required : `"$($DiskFormat.PartitionStyle)`""
+		Display_host ""
+		start-sleep 1
+
+		Display_Host "FileSystem:     $($this.GetFileSystem()     -eq $DiskFormat.FileSystem)"
+		Display_Host "              Applied  : `"$($this.GetFileSystem())`""
+		Display_host "              Required : `"$($DiskFormat.FileSystem)`""
+		Display_host ""
+		start-sleep 1
+
+		Display_Host "BlockSize:      $($this.GetBlockSize()      -eq $DiskFormat.BlockSize)"
+		Display_Host "              Applied  : `"$($this.GetBlockSize())`""
+		Display_host "              Required : `"$($DiskFormat.BlockSize)`""
+		Display_host ""
+		start-sleep 1
+
+		Display_Host "VolumeLabel:    $($this.GetVolumeLabel()    -eq $DiskFormat.NewFileSystemLabel)"
+		Display_Host "              Applied  : `"$($this.GetVolumeLabel())`""
+		Display_host "              Required : `"$($DiskFormat.NewFileSystemLabel)`""
+		Display_host ""
+		start-sleep 1
+
+		start-sleep 2
+		if ( `
+			$this.GetPartitionStyle() -eq $DiskFormat.PartitionStyle     -and `
+			$this.GetFileSystem()     -eq $DiskFormat.FileSystem         -and `
+			$this.GetBlockSize()      -eq $DiskFormat.BlockSize          -and `
+			$this.GetVolumeLabel()    -eq $DiskFormat.NewFileSystemLabel  `
+			)
+		{
+			return $True
+		}
+		 #>
+		
+		###Check Drive Partitions
+		return $False
+		return $This.CheckPartitions($DiskPartitions)
+	}
+
+		
+	[boolean]CheckPartition([hashtable]$PartitionFormat,[DiskPartition]$Partition){
+		$ExamplePartitionFormat = @{
+									PartitionStyle     = "MBR";
+									PartitionSize      = 100MB;
+									FileSystem         = "NTFS";
+									BlockSize          = 4096;
+									Label              = "Win_PE_Console_1";
+									ApplyZIP           = $NULL;
+							}
+		#$PartitionStyle     = @("Unknown","GPT","MBR")
+		#$FileSystem         = @("FAT", "FAT32", "exFAT", "NTFS", "ReFS")
+		#$AllocationUnitSize = @(4096)
+		#$NewFileSystemLabel = "Win_PE_Console"
+		
+		#PartitionSize
+		Display_Message -Message "Checking Disk,"
+		Display_Host "PartitionStyle: $($Partition.GetPartitionStyle() -eq $PartitionFormat.PartitionSize)"
+		Display_Host "              Applied  : `"$($Partition.GetPartitionStyle())`""
+		Display_host "              Required : `"$($PartitionFormat.PartitionSize)`""
+		Display_host ""
+		start-sleep 1
+		#ApplyZIP
+		
+		Display_Message -Message "Checking Disk,"
+		Display_Host "PartitionStyle: $($Partition.GetPartitionStyle() -eq $PartitionFormat.PartitionStyle)"
+		Display_Host "              Applied  : `"$($Partition.GetPartitionStyle())`""
+		Display_host "              Required : `"$($PartitionFormat.PartitionStyle)`""
+		Display_host ""
+		start-sleep 1
+
+		Display_Host "FileSystem:     $($Partition.GetFileSystem()     -eq $PartitionFormat.FileSystem)"
+		Display_Host "              Applied  : `"$($Partition.GetFileSystem())`""
+		Display_host "              Required : `"$($PartitionFormat.FileSystem)`""
+		Display_host ""
+		start-sleep 1
+
+		Display_Host "BlockSize:      $($Partition.GetBlockSize()      -eq $PartitionFormat.BlockSize)"
+		Display_Host "              Applied  : `"$($Partition.GetBlockSize())`""
+		Display_host "              Required : `"$($PartitionFormat.BlockSize)`""
+		Display_host ""
+		start-sleep 1
+
+		Display_Host "VolumeLabel:    $($Partition.GetVolumeLabel()    -eq $PartitionFormat.Label)"
+		Display_Host "              Applied  : `"$($Partition.GetVolumeLabel())`""
+		Display_host "              Required : `"$($PartitionFormat.Label)`""
+		Display_host ""
+		start-sleep 1
+
+		start-sleep 2
+		if ( `
+			$Partition.GetPartitionStyle() -eq $PartitionFormat.PartitionStyle     -and `
+			$Partition.GetFileSystem()     -eq $PartitionFormat.FileSystem         -and `
+			$Partition.GetBlockSize()      -eq $PartitionFormat.BlockSize          -and `
+			$Partition.GetVolumeLabel()    -eq $PartitionFormat.Label  `
+			)
+		{
+			return $True
+		}
+		return $False
+	}
+	
+	[boolean]CheckPartitions()
+	{
+		$this.Partitions | % {
+			Display_Host $this.Partitions
+		}
+		pause
+		return $False 
+	}
+	
+
+
+	[string] GenerateLog(){
+		$Logs = " ----------------------------------------------------------------------- `n"
+		$Logs += $(EvenSpace "Volume Name:"     $this.GetVolumeLabel()    20)
+		$Logs += $(EvenSpace "Free Space:"      $this.GetFreeSpace()      20)
+		$Logs += $(EvenSpace "Disk Space:"      $this.GetDiskSize()       20)
+		$Logs += $(EvenSpace "Files Copied:"    $this.GetFileCount()      20)
+		$Logs += $(EvenSpace "Partition Style:" $this.GetPartitionStyle() 20)
+		$Logs += $(EvenSpace "HealthStatus:"    $this.GetHealthStatus()   20)
+		$Logs += $(EvenSpace "Embedded SN:"     $this.GetSerial()         20)
+		$Logs += "`t Please note: The Embedded SN doesnt always match the Drive's Label SN."
+		$Logs += " ----------------------------------------------------------------------- `n"
+		$Logs += $this.Disk | Format-List | out-string
+		$Logs += "`n ----------------------------------------------------------------------- `n"
+		#$Logs += dir -r "$($this.AssignedLetter):\" | % { if ($_.PsIsContainer) { $_.FullName + "\" } else { $_.FullName } } | Format-List | out-string
+		$Logs += " ----------------------------------------------------------------------- `n"
+		CheckForErrors -Message "Failed to generate Logs."
+		return $Logs
+		try
+		{
+
+		}
+		catch
+		{
+			Display_Host -Message "$_"
+			Display_Error_Message -Message "Please Contact Engineering" -Message2 "Failed to generate Logs. $_ " -ClearScreen $FALSE
 		}
 		return ""
 	}
@@ -238,33 +638,37 @@ class DiskManagement {
   	.DESCRIPTION
 
   	.EXAMPLE
-
+		$USBFilters = @(
+			@{"BusType"="USB";"FriendlyName"="JetFlash Transcend 4GB";},
+			@{"BusType"="USB";"FriendlyName"="IS917 innostor";}
+			)
+			[DiskManagement]$global:DiskManagement = [DiskManagement]::new($USBFilters)
   	#>
 	$FilterOptions
 	$DiskFormat
 	$AllDisks
 	$SelectedDisks  = @()
-	DiskManagement([hashtable]$DiskFormat){
+	DiskManagement($FilterOptions){
 	<#
-      .SYNOPSIS
-      .DESCRIPTION
-      .EXAMPLE
-		Filter options example: $FilterOptions = @{"BusType"="USB"}
-		[DiskManagement]$global:DiskManagement = [DiskManagement]::new(@{"BusType"="USB"})
+	.EXAMPLE
+	$USBFilters = @(
+		@{"BusType"="USB";"FriendlyName"="JetFlash Transcend 4GB";},
+		@{"BusType"="USB";"FriendlyName"="IS917 innostor";}
+		)
+		[DiskManagement]$global:DiskManagement = [DiskManagement]::new($USBFilters)
     #>
-		$this.AllDisks = get-disk
-		$this.DiskFormat = @{
-			"PartitionStyle"     = "MBR";
-			"FileSystem"         = "NTFS";
-			"AllocationUnitSize" = 4096;
-			"NewFileSystemLabel" = "Win_PE_Console"
-		}
-		$this.DiskFormat = $DiskFormat
-		$PartitionStyle     = @("Unknown","GPT","MBR")
-		$FileSystem         = @("FAT", "FAT32", "exFAT", "NTFS", "ReFS")
-		$AllocationUnitSize = @(4096)
-		$NewFileSystemLabel = "Win_PE_Console"
+			$this.AllDisks = get-disk
+			$this.FilterOptions = $FilterOptions
+			$this.Select_Disks()
     }
+
+
+
+
+	[void] Select_Disks(){
+		$This.Select_Disks($this.FilterOptions)
+	}
+
 
 	[void] Select_Disks([hashtable]$FilterOptions){
 		<#
@@ -273,7 +677,6 @@ class DiskManagement {
 			Preps DiskManagement Object with filtered options.
 			Should be called internally from initialization function.
 		.EXAMPLE
-			Filter options example: $FilterOptions = @{"BusType"="USB"}
 			$this.Select_Disks(@{"BusType"="USB"})
 		#>
 		#Get full disk list
@@ -286,14 +689,16 @@ class DiskManagement {
 			iex "`$Disks = `$Disks | Where-Object $Option -eq `"$($FilterOptions[$Option])`""
 		}
 
+		
 		#for each disk in list Create Disk objects, and add to FilteredDisks list
  		foreach($Disk in $Disks)
 		{
-			[Disk]$DiskObject = [Disk]::new($Disk,$this.DiskFormat)
+			[Disk]$DiskObject = [Disk]::new($Disk) #.Number
 
 			$this.FilteredDisks += $DiskObject
 		}
 	}
+
 	[void] Select_Disks([hashtable[]]$FilterOptions){
 		<#
 		.SYNOPSIS
@@ -307,36 +712,48 @@ class DiskManagement {
 
 		$FilterOptions | % {
 			$FilteredDisks = $this.AllDisks
-						
+
 			foreach($Option in ($_.keys))
 			{
 				iex "`$FilteredDisks = `$FilteredDisks | Where-Object $Option -eq `"$($_[$Option])`""
 			}
-			
+
 			$this.Add_Disks($FilteredDisks)
 		}
 	}
+
+
+
 	[void] Add_Disks($FilteredDisks){
-		foreach($Disk in $FilteredDisks)
+		if ($FilteredDisks.count -ne 0)
 		{
-			$this.Add_Disk($Disk)
-		} 
-	}
-	
-	[void] Add_Disk($Disk){
-		$AddDisk = $true 
-		[Disk]$DiskObject = [Disk]::new($Disk,$this.DiskFormat)
-		foreach($SelectedDisk in ($this.SelectedDisks))
-		{			
-			if ($SelectedDisk.EquivalentTo($DiskObject))
+			foreach($Disk in $FilteredDisks)
 			{
-				$AddDisk = $False
+				$this.Add_Disk($Disk)
 			}
 		}
+		
+	}
 
-		if($AddDisk)
+	#Takes get-disk Child object(ei. $(get-disk)[0]), and adds it to the $This.SelectedDisks List
+	#Filters Duplicate Disks
+	[void] Add_Disk($Disk){
+		if ($Disk -ne $NULL)
 		{
-			$this.SelectedDisks += $DiskObject
+			$AddDisk = $true
+			[Disk]$DiskObject = [Disk]::new($Disk)
+			foreach($SelectedDisk in ($this.SelectedDisks))
+			{
+				if ($SelectedDisk.EquivalentTo($DiskObject))
+				{
+					$AddDisk = $False
+				}
+			}
+
+			if($AddDisk)
+			{
+				$this.SelectedDisks += $DiskObject
+			}
 		}
 		
 	}
@@ -355,33 +772,63 @@ class DiskManagement {
 	}
 
 	[void] PreCheck($Operator,$Expected){
-		write-host $this.FilteredDisks.count
+		Display_Host $this.SelectedDisks.count
 	}
 
 
 
 
 
-	[void] PrepDisks($FileSystem){
-		foreach($DiskObject in $this.FilteredDisks)
+	[void] CleanDisks($FileSystem){
+		foreach($DiskObject in $this.SelectedDisks)
 		{
-			$DiskObject.PrepDisk()
+			$DiskObject.CleanDisk($FileSystem)
 		}
 
 	}
 
-
-
-
-	[void] ApplyFolderContents($Source,$Source_HashCode){
-		$JOBS = @()
-		foreach($DiskObject in $this.FilteredDisks)
+#TODO: Posibly rename to better fit functionality 
+	[void] PrepDisks(
+		[string]$FileSystem,
+		[array]$DiskPartitions
+		){
+		foreach($DiskObject in $this.SelectedDisks)
 		{
-			$JOBS += $DiskObject.ApplyFolderContents_AsJob($Source,$Source_HashCode)
+			$DiskObject.CleanDisk($FileSystem)
+			$DiskObject.ApplyPartitions($DiskPartitions)
+		}
+		
+
+	}
+
+
+	[boolean] CheckDisks([hashtable[]]$DiskPartitions){
+		foreach($DiskObject in $this.SelectedDisks)
+		{
+			#[hashtable]$DiskFormat
+			if(-not $DiskObject.CheckDisk($DiskPartitions))
+			{
+				return $False
+			}
+
+		}
+		return $True
+
+	}
+
+
+
+	[void] ApplyFolderContents($Path){
+		$JOBS = @()
+
+		foreach($DiskObject in $this.SelectedDisks)
+		{
+			$JOBS += $DiskObject.ApplyFolderContents_AsJob($Path)
 		}
 
 		foreach($JOB in $JOBS)
 		{
+			#$JOB | Wait-Job
 			$VAR = $JOB | Receive-Job -Keep 6>&1
 
 			CheckJobsForErrors $JOBS
@@ -392,33 +839,124 @@ class DiskManagement {
 		CheckJobsForErrors $JOBS
 	}
 
+	[void] ApplyZip($Path){
+		<#
+		.SYNOPSIS
+		.DESCRIPTION
+			After PrepDisk(), use to apply Zip's content to $DiskManagement.Disks .
+			Unzips contents to a local Directory, creates Local Tag indicating so. If Tag is found, Use already extracted contents.
+		.EXAMPLE
+			$DiskManagement.ApplyZip("/ArchiveDirectory/Folder.ZIP")
+		#>
+		$ExpandedZIP_TagPath = "$($Global:DIR)\ExpandedZIP.tag"
+		$ExtractedDestination = Join-path $Global:Dir $(gci $Path | % {$_.BaseName})
+		if(!(Test-Path -Path $ExpandedZIP_TagPath))
+		{
+			Expand-Archive -path "$Path" -DestinationPath $Global:Dir -force
+			Display_Host "Saving Expanded ZIP Tag: $($Global:DIR)\$ExtractedDestination.ZipTag"
+			echo "." > $ExpandedZIP_TagPath
+		}
+
+		#[io.path]::GetFileNameWithoutExtension($Path)
+		Display_Host "Extracted to: $ExtractedDestination"
+		Display_Host "Calling ApplyFolderContents: $ExtractedDestination"
+		$This.ApplyFolderContents($ExtractedDestination)
+	}
 
 
-	[void] SaveLogs($ResultsDrive,$CID,$Order){
+
+	#Returns created Partition Number
+		[void]SpecifyPartitions([Array]$DiskPartitions){
+			$ExampleDiskPartitions = @(
+					@{
+						PartitionStyle     = "MBR";
+						PartitionSize      = 100MB;
+						FileSystem         = "NTFS";
+						BlockSize          = 4096;
+						Label              = "Win_PE_Console_0";
+						ApplyZIP           = $Global:TestZip;
+				},
+					@{
+						PartitionStyle     = "MBR";
+						PartitionSize      = 100MB;
+						FileSystem         = "NTFS";
+						BlockSize          = 4096;
+						Label              = "Win_PE_Console_1";
+						ApplyZIP           = $NULL;
+				}
+			)
+
+			$DiskPartitions | % {
+				$NewPartition = $This.AddPartition($DiskPartition)
+				write-host $NewPartition.DiskNumber
+				write-host $NewPartition.PartitionNumber
+				write-host $NewPartition.DriveLetter
+
+			}
+
+		}
+
+
+	[array] GetDrivePaths(){
+		<#
+		.SYNOPSIS
+			Returns list of each $DiskManagement.Disks Path.
+		#>
+		return $this.SelectedDisks | foreach {$_.GetDrivePath()}
+	}
+
+	[array] GetDiskNumbers(){
+		<#
+		.SYNOPSIS
+			Returns list of each $DiskManagement.Disks Path.
+		#>
+		write-host  $($this.SelectedDisks)
+		write-host "$($this.SelectedDisks.count)"
+		return $this.SelectedDisks | foreach {$_.GetDiskNumber()}
+	}
+
+	[string[]] GetLogs(){
+		<#
+		.SYNOPSIS
+		.DESCRIPTION
+			After PrepDisk(), use to apply Zip's content to $DiskManagement.Disks .
+			Unzips contents to a local Directory, creates Local Tag indicating so. If Tag is found, Use already extracted contents.
+		.EXAMPLE
+			$DiskManagement.ApplyZip("/ArchiveDirectory/Folder.ZIP")
+		#>
 		$Logs = @()
-		write-host "`"$ResultsDrive`"", "`"$CID`"" + "\" + $Order +"\"
 
-		$ResultsPath = MakePath($(Join-Path $ResultsDrive $CID))
-		$ResultsPath = MakePath($(Join-Path $ResultsPath $Order))
-		foreach($DiskObject in $this.FilteredDisks)
+		foreach($DiskObject in $this.SelectedDisks)
 		{
 			#write-host $DiskObject.GetSerial()
-			$DriveLogs = $DiskObject.GenerateLog($CID,$Order)
-			$SerialNumber = $DiskObject.GetSerial()
-			try{
-				$Result = MakePath($(Join-Path $ResultsPath $SerialNumber))
-				$DriveLogs | Out-File -FilePath "$($Result)\Results.log"
-			}
-			catch{
-				Display_Error_Message -Message "Please Contact Engineering" -Message2 "Failed to create Log folder:$ResultsPath $SerialNumber "
-			}
 
-			CheckForErrors -Message "Please Contact Engineering!! `n`t failed to save to $ResultsPath $SerialNumber \Results.log"
-			#write-host $DriveLogs
+			$DriveLogs = $DiskObject.GenerateLog()
+			CheckForErrors -Message "Please Contact Engineering" -Message2 "Failed to create Logs for drive $($DiskObject.GetDiskNumber) "
 			$Logs += $DriveLogs
 		}
-		$Logs
+		return $Logs
+	}
 
+	[void] SaveLogs($ResultsDrive,$CID,$OrderNumber){
+		#TODO REMOVE, ADD to External Operation
+
+		$Logs = $this.GetLogs()
+
+		$ResultsPath = MakePath($(Join-Path $ResultsDrive $CID))
+		$ResultsPath = MakePath($(Join-Path $ResultsPath $OrderNumber))
+		CheckForErrors -Message "Please Contact Engineering" -Message2 "Failed to MakePath Log folder:$ResultsDrive $CID $OrderNumber "
+
+		$HeaderLogs = GenerateLogHeader $CID $OrderNumber
+		$drive = 0
+		$Logs | % {
+			$DrivesLog = $HeaderLogs
+			$DrivesLog += $_
+
+			CheckForErrors -Message "Please Contact Engineering" -Message2 "Failed to create Log folder:$ResultsPath $SerialNumber "
+
+			$DriveLogs | Out-File -FilePath "$($ResultsPath)\Results$($drive).log"
+			$drive += 1
+		}
 
 	}
 
