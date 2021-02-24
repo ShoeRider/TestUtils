@@ -1,91 +1,367 @@
-# ==========================================================
-# DESCRIPTION:
-#     Powershell Test declarations for TestTools
-# ==========================================================
-#
-# Test:
-#     powershell -NoProfile -ExecutionPolicy Bypass -file %~dp0\Utils\TestTools\TestTools_Test.ps1
-# ==========================================================
 
-$Dir = split-path -parent $MyInvocation.MyCommand.Definition
-$global:Dir = $($Dir.Substring(0,$($Dir.Length)))
 
-#invoke-expression -Command ./../SRC/General.ps1
-try{
 
-	Import-Module "$Dir\..\SystemTools.ps1"
-	#Import-Module $Dir\ErrorHandling.ps1
-	#Import-Module $Dir\ErrorHandling.ps1
-	#Import-Module $Dir\..\TestTools\TestTools.ps1
+function Advanced-Sleep {
+  Param(
+    $Seconds,
+    [string]$Context= "Loading please wait"
+  )
+  <#
+  .SYNOPSIS
+    Simple function that simulates the built in Start-Sleep function, with a progress bar
+  .DESCRIPTION
+
+  For future Testing:
+    Measure-Command { Advanced-sleep 0 "d" }
+  .EXAMPLE
+    Example 1.
+    Advanced-sleep 5
+    Example 2.
+    Advanced-sleep 5 "Closing application please wait"
+
+  #>
+  [double]$IterationTime  = ($($([double]$seconds-2)*10),0 | Measure -Max).Maximum
+
+  For ($i=0; $i -le 100; $i++) {
+      #Write-Progress -Activity "$Context: $IterationTime" -SecondsRemaining $i
+      Write-Progress -Activity "$Context" -PercentComplete (($i / 100) * 100)
+      Start-Sleep -Milliseconds $IterationTime
+  }
 }
-catch
-{
-	write-host "Unable to import SystemTools: $Dir\..\SystemTools.ps1"
-	pause
-}
 
-CheckForErrors -Message "Failed To initialize"
 
-#New-ModuleManifest $Dir\TestTools.ps1
-Describe "TerminalExpressions" {
-	context "Initialize" {
-		It "Initializes" {
-			<#
-			.SYNOPSIS
 
-			#>
+# ==========================================================
+# RESIZE COMMAND PROMPT WINDOW
+# ==========================================================
+Function global:Set_WindowSize {
+	<#
+	.SYNOPSIS
+		Simple function that Changes the size of the window to X Y values.
+	.DESCRIPTION
+
+	.EXAMPLE
+		Example 1.
+		Set_WindowSize 100 40
+	#>
+	Param(
+		[int]$x=$host.ui.rawui.windowsize.width,
+		[int]$y=$host.ui.rawui.windowsize.height
+	)
+
+	$Enviornment = GetTerminalEnviornment
+	#write-host $Enviornment
+	try
+	{
+<# 		$size=New-Object System.Management.Automation.Host.Size($X,$Y)
+		$Script:host.ui.rawui.WindowSize=$size
+		pause #>
+		
+		#TODO Fix Irregular behavior when attempting to resize screen
+		#Added Condition for different Enviornments
+		if($Enviornment -eq "Powershell")
+		{
+			$pshost   = get-host
+			$pswindow = $pshost.ui.rawui
+			$newsize  = $pswindow.buffersize
+			<# $newsize.height = $Y
+			$newsize.width = $X
+			$pswindow.buffersize = $newsize #>
+			$newsize = $pswindow.windowsize
+			$newsize.height = $Y
+			$newsize.width = $X
+			$pswindow.windowsize = $newsize
+			write-host "Set screen size to: Width: $($host.ui.rawui.windowsize.width) Height:$($host.ui.rawui.windowsize.height)"
 		}
-		It "Set_WindowSize" {
-			<#
-			.SYNOPSIS
-
-			#>
-			$DefaultWidth  = $host.ui.rawui.windowsize.width
-			$DefaultHeight = $host.ui.rawui.windowsize.height
-			Set_WindowSize -x 10 -y 10
-      $host.ui.rawui.windowsize.width  | Should Be 10
-      $host.ui.rawui.windowsize.height | Should Be 10
-
-			Set_WindowSize -x $DefaultWidth -y $DefaultHeight
-			$host.ui.rawui.windowsize.width  | Should Be $DefaultWidth
-			$host.ui.rawui.windowsize.height | Should Be $DefaultHeight
+		elseif($Enviornment -eq "CMD")
+		{
+			$pshost   = get-host
+			$pswindow = $pshost.ui.rawui
+			$newsize  = $pswindow.buffersize
+			<# $newsize.height = $Y
+			$newsize.width = $X
+			$pswindow.buffersize = $newsize #>
+			$newsize = $pswindow.windowsize
+			$newsize.height = $Y
+			$newsize.width = $X
+			$pswindow.windowsize = $newsize
+			write-host "Set screen size to: Width: $($host.ui.rawui.windowsize.width) Height:$($host.ui.rawui.windowsize.height)"
 		}
 
-		It "Set_ScreenMode" {
-			<#
-			.SYNOPSIS
 
-			#>
-			$DefaultBackgroundcolor  = $host.ui.rawui.backgroundcolor
-			$DefaultForegroundcolor = $host.ui.rawui.foregroundcolor
-			$global:ColorOptions.keys | % {
-				#write-host
-				Set_ScreenMode -Mode $_
-				$host.ui.rawui.backgroundcolor | should be $global:ColorOptions[$_]["backgroundcolor"]
-				$host.ui.rawui.foregroundcolor | should be $global:ColorOptions[$_]["foregroundcolor"]
-				# $global:ColorOptions
-			}
-
-			$host.ui.rawui.backgroundcolor = $DefaultBackgroundcolor
-			$host.ui.rawui.foregroundcolor = $DefaultForegroundcolor
-		}
-
-		It "Validate-Param" {
-			<#
-			.SYNOPSIS
-
-			#>
-			Validate_Param -value 10  -ValidateType 'System.Int32'  | should be $True
-			Validate_Param -value "ABC"                             | should be $True
-			Validate_Param -value "ABC" -ValidateLength 3           | should be $True
-
-
-			Validate_Param -value "ABC" -ValidateType "String"      | should be $True
-			Validate_Param -value "10A" -StringToInteger            | should be $False
+	}
+	catch
+	{
+		Write-Warning "Could not Resize Window"
+		#Display_Error_Message -message "Could not Resize Window"
 	}
 }
 
+$global:ColorOptions = @{
+  "Information" = @{
+    "backgroundcolor" = "Blue"
+    "foregroundcolor" = "White"
+  };
+  "Pass" = @{
+    "backgroundcolor" = "Green"
+    "foregroundcolor" = "Black"
+  };
+  "Attention" = @{
+    "backgroundcolor" = "Yellow"
+    "foregroundcolor" = "Black"
+  };
+  "Failure" = @{
+    "backgroundcolor" = "DarkRed"
+    "foregroundcolor" = "White"
+  };
+  "Retry" = @{
+    "backgroundcolor" = "Cyan"
+    "foregroundcolor" = "Black"
+  };
+  "Default" = @{
+    "backgroundcolor" = "Cyan"
+    "foregroundcolor" = "Black"
+  };
+}
+
+# ==========================================================
+# SCREEN COLOR
+# ==========================================================
+Function global:Set_ScreenMode{
+	<#
+	.SYNOPSIS
+		This Function changes the terminal's color depending on the different display Mode.
+	.DESCRIPTION
+		Allows the terminal to display different colors to quickly convay the current state of
+		the script. Here are the different avaliable modes:
+			# Screen Color Definition:
+			# "Information" = blue
+			# "Pass"        = green
+			# "Attention"   = yellow
+			# "Failure"     = red
+			# "Retry"       = aqua
+	.EXAMPLE
+		Set_ScreenMode -Mode "Retry"
+	#>
+	Param(
+		[String]$Mode="Information"
+	)
+  try
+  {
+    $host.ui.rawui.backgroundcolor = $global:ColorOptions[$Mode]["backgroundcolor"]
+    $host.ui.rawui.foregroundcolor = $global:ColorOptions[$Mode]["foregroundcolor"]
+  }
+  catch
+  {
+    Write-Warning "Failed to Set ScreenMode"
+  }
+}
+#Set_ScreenMode -Mood "Information"
 
 
+
+Function global:CreateHeaderMessage{
+	<#
+	.EXAMPLE
+		CreateHeaderMessage "Looking Good" "Line 2"
+
+	#>
+
+	$Message  = "`n`n"
+	$Message += "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`n"
+	$args | %{ $Message += "       $_ `n"}
+	$Message += "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`n"
+	return $Message
+}
+
+
+
+
+
+
+
+Function global:Display_Host{
+	<#
+	.EXAMPLE
+		CreateAllignedMessage @("Path:","Looking Good") @("Short Path:","Looking Good?")
+
+	#>
+  if($Global:ReportToDisplay -eq $NULL -or $Global:ReportToDisplay)
+  {
+    $Args | % {write-host $_}
+  }
+	return $Args
+}
+
+# ==========================================================
+# Terminal Messages
+# ==========================================================
+Function global:Display_Message{
+	<#
+	.SYNOPSIS
+
+	.DESCRIPTION
+
+	.EXAMPLE
+		Display_Message -Mode "Retry" -Message "Looking Good"
+	#>
+	Param(
+		[String]$Mode        = "Information",
+		[String]$Message     = "Add Message",
+		[String]$Message2    = "   ",
+		[String]$Message3    = "   ",
+		[switch]$Pause,
+		$SleepFor            = 3,
+		[bool]$ClearScreen   = $True,
+		[bool]$SetScreenMode = $True
+	)
+	if($SetScreenMode)
+	{
+		write-host "$Mode"
+		Set_ScreenMode -Mode "$Mode"
+	}
+
+	if($ClearScreen -and $($Global:AllowCLS -eq $NULL -or $Global:AllowCLS))
+	{
+		cls
+	}
+
+  if($Global:ReportToDisplay -eq $NULL -or $Global:ReportToDisplay)
+  {
+    write-host "`n`n"
+  	write-host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`n"
+  	write-host "       $Message `n"
+  	write-host "       $Message2 `n"
+  	write-host "       $Message3 `n"
+  	write-host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`n"
+  }
+
+
+	if($Pause)
+	{
+		Pause
+	}
+
+	Start-Sleep -Seconds $SleepFor
+}
+
+
+
+function Validate_Param{
+	<#
+	.SYNOPSIS
+		Validate_Param is used to validate a Variable conatins data with given characteristics.
+	.DESCRIPTION
+    returns $True when value is accepted, and $False when not
+	.EXAMPLE
+		Example 1.
+
+	#>
+  [CmdletBinding()] Param(
+		[Parameter(ValueFromPipeline)]$Value,
+		[int]$ValidateLength    = -1,
+		[string]$ValidateType      = "",
+		[boolean]$Write_Host 	   = $True,
+		[switch]$StringToInteger
+	)
+
+  #Write-Host "Invalid ValidateType: `"$ValidateType`""
+  #write-host $($($Value.getType().fullname) -eq $ValidateType -or $($Value.getType().name) -eq $ValidateType)
+
+
+  if($ValidateType -ne "")
+  {
+    if(-not $($($Value.getType().fullname) -eq $ValidateType -or $($Value.getType().name) -eq $ValidateType))
+    {
+      if($Write_Host)
+      {
+        Write-Host "Invalid ValidateType: `"$ValidateType`""
+        Write-Host "Provided Fullname: `"$($Value.getType().fullname)`""
+        Write-Host "Provided name: `"$($Value.getType().name)`""
+      }
+      return $False
+    }
+  }
+
+  if($StringToInteger)
+  {
+    $alphabet = @()
+    65..90|foreach-object{$alphabet += [char]$_}
+    #write-host $Value
+    #write-host $alphabet
+    #write-host $(ContainsCaracters -String $Value -Characters $alphabet)
+	
+    return $Value | isNumeric
+     #'[^a-zA-Z]'
+  }
+
+
+	if (($ValidateLength -ne -1) -and ($Value.Length -ne $ValidateLength))
+	{
+		if($Write_Host)
+		{
+			Write-Host "Invalid String Length!, Expected Length ($ValidateLength) but received ($($Value.Length))"
+			Write-Host "Entered Value: '$Value'"
+		}
+
+		return $False
+	}
+
+  #ContainsCaracters($Value,"")
+
+
+
+	return $True
+}
+
+
+
+
+
+
+#TODO FIX -ValidateType Integer
+Function global:RequestValue{
+	<#
+	.SYNOPSIS
+		Function to request data from the user.
+	.DESCRIPTION
+		Preforms some InputLength Checking, If $InputLength flag set to -1, input length is ignored.
+		Supported Types:
+			-'String'  : String
+			-'int'     : Integer
+			-'float'   : float
+	.EXAMPLE
+		$Value = RequestValue -Message "Please Enter Value:"
+	#>
+	  [CmdletBinding()] Param(
+		[Parameter(ValueFromPipeline)]$PassThroughValue       = $NULL,
+		[String]$Mode            = "Attention",
+		[String]$Message         = "Missing Prompt",
+		[int]$InputLength        = -1,
+		[string]$CastType        = "string"
+
+	)
+	#$Type.ToLower()
+
+	if(($PassThroughValue -ne $NULL) -and (Validate_Param -Value $PassThroughValue -InputLength $InputLength -CastType $CastType -Write_Host $False))
+	{
+		Write-Host "$Message : $PassThroughValue"
+		return $PassThroughValue
+	}
+
+	Set_ScreenMode -Mode "$Mode"
+	$GatherInput = $True
+	while($GatherInput)
+	{
+		#Write-Host " "
+		$GatheredInput = Read-Host -Prompt $Message
+
+		if ((Validate_Param -Value $GatheredInput -InputLength $InputLength -CastType $CastType -Write_Host $True))
+		{
+			Write-Host "$Message : $GatheredInput" -InformationAction Ignore
+			return $GatheredInput
+		}
+
+	}
 
 }
