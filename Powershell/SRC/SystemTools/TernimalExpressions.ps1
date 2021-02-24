@@ -1,7 +1,7 @@
 
 
 
-function Advanced-sleep {
+function Advanced-Sleep {
   Param(
     $Seconds,
     [string]$Context= "Loading please wait"
@@ -30,6 +30,7 @@ function Advanced-sleep {
 }
 
 
+
 # ==========================================================
 # RESIZE COMMAND PROMPT WINDOW
 # ==========================================================
@@ -48,26 +49,46 @@ Function global:Set_WindowSize {
 		[int]$y=$host.ui.rawui.windowsize.height
 	)
 
-
-
+	$Enviornment = GetTerminalEnviornment
+	#write-host $Enviornment
 	try
 	{
 <# 		$size=New-Object System.Management.Automation.Host.Size($X,$Y)
 		$Script:host.ui.rawui.WindowSize=$size
 		pause #>
+		
+		#TODO Fix Irregular behavior when attempting to resize screen
+		#Added Condition for different Enviornments
+		if($Enviornment -eq "Powershell")
+		{
+			$pshost   = get-host
+			$pswindow = $pshost.ui.rawui
+			$newsize  = $pswindow.buffersize
+			<# $newsize.height = $Y
+			$newsize.width = $X
+			$pswindow.buffersize = $newsize #>
+			$newsize = $pswindow.windowsize
+			$newsize.height = $Y
+			$newsize.width = $X
+			$pswindow.windowsize = $newsize
+			write-host "Set screen size to: Width: $($host.ui.rawui.windowsize.width) Height:$($host.ui.rawui.windowsize.height)"
+		}
+		elseif($Enviornment -eq "CMD")
+		{
+			$pshost   = get-host
+			$pswindow = $pshost.ui.rawui
+			$newsize  = $pswindow.buffersize
+			<# $newsize.height = $Y
+			$newsize.width = $X
+			$pswindow.buffersize = $newsize #>
+			$newsize = $pswindow.windowsize
+			$newsize.height = $Y
+			$newsize.width = $X
+			$pswindow.windowsize = $newsize
+			write-host "Set screen size to: Width: $($host.ui.rawui.windowsize.width) Height:$($host.ui.rawui.windowsize.height)"
+		}
 
 
-		$pshost = get-host
-		$pswindow = $pshost.ui.rawui
-		$newsize = $pswindow.buffersize
-		<# $newsize.height = $Y
-		$newsize.width = $X
-		$pswindow.buffersize = $newsize #>
-		$newsize = $pswindow.windowsize
-		$newsize.height = $Y
-		$newsize.width = $X
-		$pswindow.windowsize = $newsize
-		write-host "Set screen size to: Width: $($host.ui.rawui.windowsize.width) Height:$($host.ui.rawui.windowsize.height)"
 	}
 	catch
 	{
@@ -138,6 +159,40 @@ Function global:Set_ScreenMode{
 #Set_ScreenMode -Mood "Information"
 
 
+
+Function global:CreateHeaderMessage{
+	<#
+	.EXAMPLE
+		CreateHeaderMessage "Looking Good" "Line 2"
+
+	#>
+
+	$Message  = "`n`n"
+	$Message += "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`n"
+	$args | %{ $Message += "       $_ `n"}
+	$Message += "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`n"
+	return $Message
+}
+
+
+
+
+
+
+
+Function global:Display_Host{
+	<#
+	.EXAMPLE
+		CreateAllignedMessage @("Path:","Looking Good") @("Short Path:","Looking Good?")
+
+	#>
+  if($Global:ReportToDisplay -eq $NULL -or $Global:ReportToDisplay)
+  {
+    $Args | % {write-host $_}
+  }
+	return $Args
+}
+
 # ==========================================================
 # Terminal Messages
 # ==========================================================
@@ -155,7 +210,6 @@ Function global:Display_Message{
 		[String]$Message     = "Add Message",
 		[String]$Message2    = "   ",
 		[String]$Message3    = "   ",
-		$ErrorMessages       = $False,
 		[switch]$Pause,
 		$SleepFor            = 3,
 		[bool]$ClearScreen   = $True,
@@ -167,16 +221,21 @@ Function global:Display_Message{
 		Set_ScreenMode -Mode "$Mode"
 	}
 
-	if($ClearScreen)
+	if($ClearScreen -and $($Global:AllowCLS -eq $NULL -or $Global:AllowCLS))
 	{
 		cls
 	}
-	write-host "`n`n"
-	write-host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`n"
-	write-host "       $Message `n"
-	write-host "       $Message2 `n"
-	write-host "       $Message3 `n"
-	write-host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`n"
+
+  if($Global:ReportToDisplay -eq $NULL -or $Global:ReportToDisplay)
+  {
+    write-host "`n`n"
+  	write-host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`n"
+  	write-host "       $Message `n"
+  	write-host "       $Message2 `n"
+  	write-host "       $Message3 `n"
+  	write-host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`n"
+  }
+
 
 	if($Pause)
 	{
@@ -226,16 +285,13 @@ function Validate_Param{
 
   if($StringToInteger)
   {
-    $alphabet=@()
+    $alphabet = @()
     65..90|foreach-object{$alphabet += [char]$_}
     #write-host $Value
     #write-host $alphabet
     #write-host $(ContainsCaracters -String $Value -Characters $alphabet)
-    if($(ContainsCaracters -String $Value -Characters $alphabet))
-    {
-      #write-host "Validate_Param:$False"
-      return $False
-    }
+	
+    return $Value | isNumeric
      #'[^a-zA-Z]'
   }
 
