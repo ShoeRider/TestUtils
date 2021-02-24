@@ -241,6 +241,11 @@ class ErrorHandling {
 
 }
 
+
+
+
+
+
 Function global:Display_Error_Message{
 	<#
 	.SYNOPSIS
@@ -249,7 +254,10 @@ Function global:Display_Error_Message{
 
 	.EXAMPLE
 		Display_Error_Message -Mode $Mode -Message $Message -Message2 $Message2 -Message3 "An error has occured" -ErrorMessage $Error -ClearScreen $True -SleepFor 0
-		Display_Error_Message -Message "Test" -Message2 "Test"  -Message3 "Test"
+		Display_Error_Message -Mode "Failure"`
+						-Message "Please Contact Engineering"`
+						-Message2 "Failed to move Files $XCopyAttempts / $MaxAttempts Attempts" `
+						-Message3 "Error: $error"
 	#>
 	Param(
 		[String]$Mode="Failure",
@@ -260,7 +268,8 @@ Function global:Display_Error_Message{
 		[Boolean]$ClearScreen=$True,
 		[Boolean]$Pause=$True
 	)
-
+	
+	Write-Error -Message "Something Failed, Failsafe Path"
 	#Stop-Transcript
 	$continue = $true
 	while($continue)
@@ -275,35 +284,6 @@ Function global:Display_Error_Message{
 	#ExitWithCode -exitcode 1
 }
 
-Function global:CheckJobsForErrors{
-	<#
-	.SYNOPSIS
-		Function to display Error, and Halt Program.
-	.DESCRIPTION
-
-	.EXAMPLE
-		CheckForErrors -Message "Something Went wrong"
-	#>
-	Param(
-		$JOBS,
-		[String]$Mode="Failure",
-		[String]$Message=" Add Message",
-		[String]$Message2="Contact Engineering!",
-		[Boolean]$ClearScreen=$True,
-		[Boolean]$Pause=$True
-	)
-	foreach($JOB in $JOBS)
-	{
-		write-host $JOB.JobStateInfo.Reason.Message
-		$JOB | Receive-Job -Keep -OutVariable MyOut -ErrorVariable MyError
-		if($MyError)
-		{
-			Display_Error_Message -Mode $Mode -Message $MyError -Message2 $Message2 -ClearScreen $ClearScreen -Pause $Pause
-		}
-		#Display_Error_Message -Mode $Mode -Message $Message -Message2 $Message2 -ClearScreen $ClearScreen -Pause $Pause
-	}
-
-}
 
 
 
@@ -328,11 +308,12 @@ Function global:CheckJobsForErrors{
 	foreach($JOB in $JOBS)
 	{
 
-		write-host $JOB.JobStateInfo.Reason.Message
+		
 		$JOB | Receive-Job -Keep -OutVariable MyOut -ErrorVariable MyError 6>&1
 		if($MyError)
 		{
-			Display_Error_Message -Mode $Mode -Message $MyError -Message2 $Message2 -ClearScreen $ClearScreen -Pause $Pause
+			write-host $JOB.JobStateInfo.Reason.Message
+			Display_Error_Message -Mode $Mode -Message "Job Failed:$MyError" -Message2 "$($JOB.JobStateInfo.Reason.Message)" -ClearScreen $ClearScreen -Pause $Pause
 		}
 
 		#Display_Error_Message -Mode $Mode -Message $Message -Message2 $Message2 -ClearScreen $ClearScreen -Pause $Pause
@@ -344,9 +325,9 @@ Function global:CheckJobsForErrors{
 Function global:CheckForErrors{
 	<#
 	.SYNOPSIS
-		Function to display Error, and Halt Program.
+		Function to check for system errors, and Halt Program with prompt.
 	.DESCRIPTION
-
+		quick one line function to verify no errors have occured.
 	.EXAMPLE
 		CheckForErrors -Message "Something Went wrong"
 	#>
@@ -354,16 +335,26 @@ Function global:CheckForErrors{
 		[String]$Mode="Failure",
 		[String]$Message=" Add Message",
 		[String]$Message2="Contact Engineering!",
+		[String]$Message3="",
 		[Boolean]$ClearScreen=$True,
 		[Boolean]$Pause=$True
 	)
 
 	if($lastexitcode -or $Error)
 	{
+		$Message2+="`n Error:$Error"
 		if($lastexitcode)
 		{
 			$Message2="lastexitcode: $lastexitcode"
 		}
+		if($Error)
+		{
+			
+		}
 		Display_Error_Message -Mode $Mode -Message $Message -Message2 $Message2 -ClearScreen $ClearScreen -Pause $Pause
+		#If Continue is selected from Display_Error_Message, return 1 as error has occured.
+		return 1
 	}
+	#Return 0 as no errors have been detected.
+	return 0
 }
