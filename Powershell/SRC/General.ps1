@@ -132,7 +132,11 @@ function global:ParametersOfList {
 }
 
 
-
+filter isNumeric() {
+    return $_ -is [byte]  -or $_ -is [int16]  -or $_ -is [int32]  -or $_ -is [int64]  `
+       -or $_ -is [sbyte] -or $_ -is [uint16] -or $_ -is [uint32] -or $_ -is [uint64] `
+       -or $_ -is [float] -or $_ -is [double] -or $_ -is [decimal]
+}
 
 
 
@@ -156,6 +160,42 @@ function global:New_TemporaryDirectory {
     [string] $name = [System.Guid]::NewGuid()
     return New-Item -ItemType Directory -Path (Join-Path $parent $name)
 }
+
+
+
+
+
+#Works with Powershell 5, Might not work with Powershell 6+
+Function GetTerminalEnviornment(){
+	<#
+	  .SYNOPSIS
+		Simple function that creates a temporary file.
+	  .DESCRIPTION
+
+	  .EXAMPLE
+		Example 1.
+		  GetTerminalEnviornment
+		Example 2.
+		Advanced-sleep 5 "Closing application please wait"
+	#>
+	(dir 2>&1 *`|echo CMD);&<# rem #>echo PowerShell
+	
+	<#
+	#Possable solution for Powershell 6+
+	if ($myinvocation.line) {
+		"run from cli"
+	} else {
+		"run via explorer right click"
+		$x = read-host
+	}
+	#>
+}
+
+
+
+
+
+
 
 
 
@@ -441,4 +481,77 @@ Function global:READ_SETENV{
 
 
 }
-#READ_SETENV
+
+
+
+
+
+
+
+
+Function global:GetFileCount{
+  [CmdletBinding()] Param(
+		[string]$Path
+	)
+	return $((Get-ChildItem "$Path" -Recurse ) | where {$_ -is [System.IO.FileInfo]}).Count
+}
+
+Function global:RemovePath{
+  [CmdletBinding()] Param(
+		[string]$Path
+	)
+	 if(Test-Path -Path $Path )
+      {
+        Remove-Item $Path -Recurse -ErrorAction Ignore
+      }
+      return $Path
+}
+
+
+Function global:JoinPath{
+  [CmdletBinding()] Param(
+		[string]$List
+	)
+	$Path = ""
+	foreach($Appendage in $List)
+	{
+		if ($Path -eq "")
+		{
+			$Path = $appendage
+		}
+		else
+		{
+			$Path = join-path $Path $Appendage
+		}
+	}
+	return $Path
+}
+
+Function global:CleanFolder{
+  [CmdletBinding()] Param(
+		[string]$Path
+	)
+	<#
+	.SYNOPSIS
+
+	.DESCRIPTION
+
+	.EXAMPLE
+
+	#>
+	try
+	{
+		if($Path.Substring($Path.get_Length()-1) -ne "\" )
+		{
+			$Path+="\"
+		}
+		if(Test-Path -Path $Path )
+		{
+			Remove-Item -Recurse -Force $Path*.*
+		}
+	}
+	catch
+	{
+		write-host "Failed to Clean Results folder: `n" + $Error[0]
+	}
+}
